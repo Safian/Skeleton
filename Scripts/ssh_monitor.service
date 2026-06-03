@@ -1,0 +1,18 @@
+[Unit]
+Description=Skeleton SSH Monitor – sikeres bejelentkezés riasztó
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/skeleton/scripts/ssh_monitor.sh
+Restart=always
+RestartSec=5
+User=root
+EnvironmentFile=-/etc/fail2ban/skeleton.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ssh-monitor
+
+[Install]
+WantedBy=multi-user.target

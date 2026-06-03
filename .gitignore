@@ -1,0 +1,38 @@
+# ── Titkok / környezet ───────────────────────────────────────
+# SOHA ne kerüljön verziókövetésbe! (OpenAI kulcs, service_role, JWT secret, jelszó)
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+.env.bak
+# kulcs-mappa (pl. .keys/google_service_key.json – Google service account)
+.keys/
+.keys/**
+**/google_service_key.json
+**/*service*account*.json
+# minden *.env végződésű fájl (pl. Scripts/security/config.env – SECURITY_API_KEY!)
+*.env
+**/*.env
+!*.env.example
+
+# Supabase helyi állapot / linkelt projekt
+Supabase/.temp/
+Supabase/.branches/
+**/supabase/.temp/
+
+# ── Flutter ──────────────────────────────────────────────────
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/generated_plugin_registrant.dart
+**/lib/l10n/app_localizations*.dart
+
+# ── OS / IDE ─────────────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/

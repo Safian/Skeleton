@@ -1,0 +1,25 @@
+# ============================================================
+# Systemd service – Unban Listener
+# Telepítés:
+#   cp unban-listener.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now unban-listener
+# ============================================================
+
+[Unit]
+Description=Security Unban Listener (Supabase → VPS)
+After=network.target fail2ban.service
+Requires=fail2ban.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/security-monitor/config.env
+ExecStart=/etc/security-monitor/vps-unban-listener.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

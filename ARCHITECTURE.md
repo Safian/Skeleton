@@ -1,0 +1,169 @@
+# Skeleton – Enterprise Architecture
+
+> **8 éles-kész modul** Flutter (kliens + admin) + Supabase self-hosted + VPS scripts alapon.
+> Ebből a projektből bármilyen SaaS / B2C alkalmazás gyorsan elindítható.
+
+---
+
+## Modul összefoglaló
+
+| # | Modul | DB tábla(k) | Edge Function(s) | Flutter | Státusz |
+|---|-------|-------------|------------------|---------|---------|
+| 1 | Security Shield | `security_logs`, `banned_ips` | `security-alert` ✅, `security-unban` ✅ | Admin: SecurityScreen ✅ | ✅ KÉSZ |
+| 2 | Admin Invitation | `admin_invitations` | `admin-invite` ✅, `admin-invite-accept` ✅ | Admin: InvitationsScreen ✅, Client: InviteAcceptScreen ✅ | ✅ KÉSZ |
+| 3 | Auth (Social + Autofill) | — | — | Client: AuthScreen (Google+Apple+Autofill) ✅, nginx `.well-known` ✅ | ✅ KÉSZ |
+| 4 | Backup & Monitoring | `backup_logs` | — | Admin: BackupScreen ✅, Scripts ✅ | ✅ KÉSZ |
+| 5 | Remote Config & Flags | `app_config` | `app-config` ✅ | Admin: ConfigScreen ✅, Client: ConfigCubit ✅, MaintenanceScreen ✅, UpdateRequiredScreen ✅ | ✅ KÉSZ |
+| 6 | Session Logging | `user_sessions` | `session-log` ✅ | Admin: SessionsScreen ✅, Client: SessionLogger ✅ | ✅ KÉSZ |
+| 7 | QA Bug Reporter | `bug_reports` | `bug-report` ✅ | Admin: BugReportsScreen ✅, Client: BugReporter+BugReportSheet ✅ | ✅ KÉSZ |
+| 8 | Feature Walkthrough | — (SharedPrefs) | — | Client: TutorialController ✅, TutorialOverlay ✅, TutorialBubble ✅ | ✅ KÉSZ |
+
+---
+
+## Mappastruktúra
+
+```
+Skeleton/
+├── Flutter/
+│   ├── lib/                              ← Kliens app (skeleton_app)
+│   │   ├── blocs/
+│   │   │   ├── auth/                     ← Email/password + social login
+│   │   │   ├── config/                   ← [M5] Remote config + maintenance ✅
+│   │   │   │   ├── config_cubit.dart
+│   │   │   │   └── config_state.dart
+│   │   │   ├── items/                    ← Példa lista adatok
+│   │   │   ├── session/                  ← Auth életciklus (SessionCubit)
+│   │   │   └── translation/              ← Fordítás kezelő
+│   │   ├── models/
+│   │   │   ├── app_config.dart           ← [M5] Remote konfig modell
+│   │   │   ├── user_session.dart         ← [M6] Session metaadat modell ✅
+│   │   │   └── ...
+│   │   ├── repositories/
+│   │   │   ├── config_repository.dart    ← [M5] app_config tábla olvasás
+│   │   │   └── ...
+│   │   ├── screens/
+│   │   │   ├── auth/
+│   │   │   │   ├── auth_screen.dart      ← [M3] Email + Google + Apple + Autofill
+│   │   │   │   └── invite_accept_screen.dart  ← [M2]
+│   │   │   ├── maintenance_screen.dart   ← [M5] Karbantartási képernyő ✅
+│   │   │   ├── update_required_screen.dart ← [M5] Force/Soft update ✅
+│   │   │   └── home/...
+│   │   ├── services/
+│   │   │   ├── session_logger.dart       ← [M6] Bejelentkezési metaadat küldő ✅
+│   │   │   ├── bug_reporter.dart         ← [M7] QA Shield service + annotáció ✅
+│   │   │   └── log_buffer.dart           ← [M7] Utolsó 50 log memóriában ✅
+│   │   └── widgets/
+│   │       └── tutorial/
+│   │           ├── tutorial_controller.dart  ← [M8] SharedPrefs + lépéskezelő ✅
+│   │           ├── tutorial_overlay.dart     ← [M8] Hole-punch overlay ✅
+│   │           └── tutorial_bubble.dart      ← [M8] Magyarázó buborék ✅
+│   │
+│   └── admin/lib/                        ← Admin app (skeleton_admin)
+│       ├── blocs/
+│       │   ├── app_config/               ← [M5] Feature flags + maintenance ✅
+│       │   │   ├── app_config_cubit.dart
+│       │   │   └── app_config_state.dart
+│       │   ├── invitations/              ← [M2]
+│       │   ├── security/                 ← [M1]
+│       │   └── sessions/                 ← [M6] Munkamenet kezelő ✅
+│       │       ├── sessions_cubit.dart
+│       │       └── sessions_state.dart
+│       ├── models/
+│       │   ├── app_config.dart           ← [M5] AppConfigEntry ✅
+│       │   ├── user_session.dart         ← [M6] UserSession admin modell ✅
+│       │   ├── bug_report.dart           ← [M7] BugReport modell ✅
+│       │   └── ...
+│       ├── repositories/
+│       │   ├── app_config_repository.dart  ← [M5] ✅
+│       │   ├── session_repository.dart     ← [M6] ✅
+│       │   ├── bug_report_repository.dart  ← [M7] ✅
+│       │   └── ...
+│       └── screens/home/
+│           ├── config/
+│           │   └── config_screen.dart    ← [M5] Feature flags + karbantartás UI ✅
+│           ├── sessions/
+│           │   └── sessions_screen.dart  ← [M6] Aktív munkamenetek + diagramok ✅
+│           ├── bug_reports/
+│           │   └── bug_reports_screen.dart ← [M7] Bug riportok kezelő ✅
+│           ├── security/                 ← [M1] SecurityScreen ✅
+│           ├── invitations/              ← [M2] InvitationsScreen ✅
+│           ├── backup/                   ← [M4] BackupScreen ✅
+│           └── ...
+│
+├── Supabase/
+│   └── supabase/
+│       ├── migrations/
+│       │   ├── 20240101000001_user_profiles.sql
+│       │   ├── 20240101000002_items.sql
+│       │   ├── 20240101000003_admin_features.sql
+│       │   ├── 20240101000004_security_hardening.sql
+│       │   ├── 20240101000005_security_logs.sql       ← [M1] ✅
+│       │   ├── 20240101000006_admin_invitations.sql   ← [M2] ✅
+│       │   ├── 20240101000007_app_config.sql          ← [M5] ✅
+│       │   ├── 20240101000008_user_sessions.sql       ← [M6] ✅
+│       │   ├── 20240101000009_backup_logs.sql         ← [M4] ✅
+│       │   └── 20240101000010_bug_reports.sql         ← [M7] ✅
+│       └── functions/
+│           ├── security-alert/     ← [M1] Bearer token + Telegram + DB ✅
+│           ├── security-unban/     ← [M1] IP feloldás VPS-en ✅
+│           ├── admin-invite/       ← [M2] E-mail meghívó küldés ✅
+│           ├── admin-invite-accept/ ← [M2] Token validáció + admin role ✅
+│           ├── app-config/         ← [M5] Nyilvános konfig endpoint ✅
+│           ├── session-log/        ← [M6] Session metaadat + geo ✅
+│           ├── bug-report/         ← [M7] Bug fogadás + screenshot + Telegram ✅
+│           └── translate-language/ ← Fordítás segéd
+│
+├── Scripts/
+│   ├── security/
+│   │   ├── fail2ban-action.sh      ← [M1] Fail2Ban → API curl ✅
+│   │   ├── ssh-login-monitor.sh    ← [M1] SSH root login figyelő ✅
+│   │   ├── vps-unban-listener.sh   ← [M1] VPS HTTP unban listener ✅
+│   │   └── INSTALL.md
+│   ├── backup_db.sh                ← [M4] Éjszakai S3 backup ✅
+│   └── resource_monitor.sh         ← [M4] CPU/RAM/disk Telegram riasztó ✅
+│
+└── nginx/
+    ├── skeleton.conf               ← [M3] HTTPS + proxy konfig ✅
+    └── well-known/
+        ├── apple-app-site-association  ← [M3] Universal Links ✅
+        └── assetlinks.json             ← [M3] Android App Links ✅
+```
+
+---
+
+## Biztonság & Konvenciók
+
+- **RLS minden táblán** – service_role bypass, user-scoped policies
+- **Admin ellenőrzés** minden admin edge function-ben (`is_admin(uid)`)
+- **Bearer token** a szerver→Supabase security webhook-on (`security_webhook_api_key`)
+- **HTTPS only** – minden külső hívás, nginx SSL terminálás
+- **Env vars** – semmi secret kódban; `.env` fájl Flutter-ben, Supabase env VPS-en
+- **Soft delete** ahol lehetséges (`is_active` / `deleted_at` flag)
+
+---
+
+## Új modul indítása ebből a Skeleton-ből
+
+1. **Klónozd** a repót, cseréld le az app nevét (`skeleton_app` → `sajat_app`)
+2. **Futtasd** a migrációkat: `supabase db push`
+3. **Deploy** az edge function-öket: `supabase functions deploy --no-verify-jwt`
+4. **Töltsd ki** a `.env` fájlokat (Supabase URL, anon key, OAuth redirect)
+5. **Konfiguráld** az `app_settings` táblát (Telegram token, SMTP stb.)
+6. **Deployold** a Supabase-t és az nginx-et a VPS-re Docker Compose-zal
+
+---
+
+## Flutter package-ek (kliens)
+
+| Package | Verzió | Célmodul |
+|---------|--------|----------|
+| `supabase_flutter` | ^2.12 | Alap |
+| `flutter_bloc` | ^9.1 | State management |
+| `equatable` | ^2.0 | BLoC |
+| `flutter_dotenv` | ^5.1 | Config |
+| `package_info_plus` | ^8.0 | [M5] Verzióellenőrzés |
+| `device_info_plus` | ^10.0 | [M6] Eszközadatok |
+| `shared_preferences` | ^2.3 | [M8] Tutorial állapot |
+| `url_launcher` | ^6.3 | [M5] App Store link |
+| `google_fonts` | ^6.2 | UI |
+| `lucide_icons_flutter` | ^3.1 | UI ikonok |
