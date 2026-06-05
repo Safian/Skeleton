@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -166,22 +167,10 @@ class BugReporter {
         'logs': logs,
       };
 
-      if (annotatedScreenshot != null) {
-        // Multipart beküldés screenshot-tal
-        final client = Supabase.instance.client;
-        final formData = {
-          'data': payload.toString(), // JSON stringify-olt a Dart-ban
-        };
-        // Közvetlen HTTP POST – Supabase Functions nem támogat multipart-ot
-        // a functions.invoke-n keresztül, ezért http csomag szükséges
-        // TODO: http csomag hozzáadása → multipart feltöltés
-        await client.functions.invoke('bug-report', body: payload);
-      } else {
-        await Supabase.instance.client.functions.invoke(
-          'bug-report',
-          body: payload,
-        );
-      }
+      await Supabase.instance.client.functions.invoke(
+        'bug-report',
+        body: payload,
+      );
 
       LogBuffer.instance.info('[BugReporter] Bug report sikeresen beküldve');
       return true;
@@ -586,15 +575,10 @@ class _AnnotationPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Vászon háttér (fekete ha nincs screenshot)
     canvas.drawRect(
       Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = Colors.black,
+      Paint()..color = Colors.black87,
     );
-
-    // Screenshot rajzolása (egyszerűsített – teljes implementációhoz
-    // flutter_image_compress vagy ui.Image szükséges)
-    // TODO: screenshot decoding és rajzolás ui.Image-ként
 
     // Befejezett vonások
     final paint = Paint()

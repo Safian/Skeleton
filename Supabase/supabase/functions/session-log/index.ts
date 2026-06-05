@@ -85,25 +85,37 @@ function getRealIp(req: Request): string | null {
   );
 }
 
-// ── CORS ───────────────────────────────────────────────────────
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-};
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
 
 // ── Main Handler ───────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -112,7 +124,7 @@ Deno.serve(async (req: Request) => {
   if (!authHeader.startsWith('Bearer ')) {
     return new Response(JSON.stringify({ error: 'Missing auth token' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -128,7 +140,7 @@ Deno.serve(async (req: Request) => {
   if (userError || !user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -139,7 +151,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -176,7 +188,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ ok: true, session_id: existingSession.id, updated: true }),
-      { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -208,12 +220,12 @@ Deno.serve(async (req: Request) => {
     console.error('[session-log] Insert error:', insertError);
     return new Response(
       JSON.stringify({ error: 'Failed to log session', detail: insertError.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
   return new Response(
     JSON.stringify({ ok: true, session_id: newSession.id, created: true }),
-    { status: 201, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+    { status: 201, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
   );
 });

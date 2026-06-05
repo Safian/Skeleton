@@ -10,6 +10,7 @@ import '../../../blocs/session/session_state.dart';
 import '../../../blocs/translation/translation_cubit.dart';
 import '../../../core/translation_extension.dart';
 import 'edit_profile_screen.dart';
+import '../../../services/tutorial_service.dart'; // [M4.2]
 
 // ============================================================
 // SettingsScreen – Tab 4
@@ -24,6 +25,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
+
+  // ── [M4.2] Tutorial reset ───────────────────────────────────────
+
+  Future<void> _resetTutorials() async {
+    await TutorialService.instance.resetAll();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Minden tutorial visszaállítva!'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
 
   // ── Navigate to EditProfileScreen ────────────────────────────
 
@@ -274,6 +288,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 Divider(color: AppColors.divider, height: 1),
                 SettingsListTile(
+                  icon: LucideIcons.helpCircle,
+                  title: 'Tutorialok újraindítása',
+                  subtitle: 'Képernyős útmutatók visszaállítása',
+                  onTap: _resetTutorials,
+                ),
+                Divider(color: AppColors.divider, height: 1),
+                SettingsListTile(
                   icon: LucideIcons.fileText,
                   title: 'Felhasználási feltételek',
                   onTap: () => _showDocumentDialog('terms'),
@@ -437,8 +458,8 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       _showError('Add meg a jelenlegi jelszavadat!');
       return;
     }
-    if (newPass.length < 6) {
-      _showError('Az új jelszónak legalább 6 karakterből kell állnia!');
+    if (newPass.length < 8) {
+      _showError('Az új jelszónak legalább 8 karakterből kell állnia!');
       return;
     }
     // If new password is hidden, require confirmation

@@ -10,19 +10,36 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
+
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // ── Auth: admin JWT ────────────────────────────────────────────
@@ -36,7 +53,10 @@ Deno.serve(async (req: Request) => {
 
   const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
   if (userError || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // Service role client az adminság ellenőrzéshez
@@ -52,13 +72,19 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (profile?.role !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403 });
+    return new Response(JSON.stringify({ error: 'Admin only' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // ── Payload ────────────────────────────────────────────────────
   const { ip_address, jail } = await req.json();
   if (!ip_address) {
-    return new Response(JSON.stringify({ error: 'Missing ip_address' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'Missing ip_address' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // ── 1) Supabase banned_ips frissítés ──────────────────────────
@@ -77,26 +103,49 @@ Deno.serve(async (req: Request) => {
   });
 
   // ── 2) VPS unban listener hívás ───────────────────────────────
-  const { data: urlSetting } = await supabase
+  const { data: settingsRows2 } = await supabase
     .from('app_settings')
-    .select('value')
-    .eq('id', 'unban_webhook_url')
-    .single();
+    .select('id, value')
+    .in('id', ['unban_webhook_url', 'unban_listener_secret']);
+
+  const vpsSettings: Record<string, string> = {};
+  for (const row of settingsRows2 ?? []) vpsSettings[row.id] = row.value;
 
   let vpsResult: Record<string, unknown> = { skipped: true };
 
-  if (urlSetting?.value) {
+  if (vpsSettings.unban_webhook_url) {
+    // SSRF védelme: csak http/https engedélyezett, nem belső cím
+    let webhookUrl: URL;
     try {
-      const vpsRes = await fetch(urlSetting.value, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ ip_address, jail: jail ?? 'sshd' }),
-        signal:  AbortSignal.timeout(8000),
-      });
-      vpsResult = { ok: vpsRes.ok, status: vpsRes.status };
-    } catch (err) {
-      vpsResult = { error: String(err) };
-      console.error('[security-unban] VPS listener error:', err);
+      webhookUrl = new URL(vpsSettings.unban_webhook_url);
+    } catch {
+      console.warn('[security-unban] Invalid webhook URL in settings');
+      vpsResult = { error: 'invalid_webhook_url' };
+      // folytatás – Supabase frissítés már megtörtént
+      return new Response(
+        JSON.stringify({ ok: true, ip_address, vps: vpsResult }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
+      );
+    }
+    if (webhookUrl.protocol !== 'http:' && webhookUrl.protocol !== 'https:') {
+      vpsResult = { error: 'invalid_webhook_protocol' };
+    } else {
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (vpsSettings.unban_listener_secret) {
+          headers['X-Unban-Secret'] = vpsSettings.unban_listener_secret;
+        }
+        const vpsRes = await fetch(webhookUrl.toString(), {
+          method:  'POST',
+          headers,
+          body:    JSON.stringify({ ip_address, jail: jail ?? 'sshd' }),
+          signal:  AbortSignal.timeout(8000),
+        });
+        vpsResult = { ok: vpsRes.ok, status: vpsRes.status };
+      } catch (err) {
+        vpsResult = { error: String(err) };
+        console.error('[security-unban] VPS listener error:', err);
+      }
     }
   }
 
@@ -104,10 +153,7 @@ Deno.serve(async (req: Request) => {
     JSON.stringify({ ok: true, ip_address, vps: vpsResult }),
     {
       status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     },
   );
 });

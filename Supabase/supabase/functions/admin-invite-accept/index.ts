@@ -13,19 +13,36 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   const supabase = createClient(
@@ -38,7 +55,10 @@ Deno.serve(async (req: Request) => {
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   const { token, password, display_name } = body;
@@ -46,13 +66,13 @@ Deno.serve(async (req: Request) => {
   if (!token || !password) {
     return new Response(
       JSON.stringify({ error: 'token és password kötelező' }),
-      { status: 400 },
+      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
   if (password.length < 8) {
     return new Response(
       JSON.stringify({ error: 'A jelszónak legalább 8 karakter kell' }),
-      { status: 400 },
+      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -64,7 +84,10 @@ Deno.serve(async (req: Request) => {
 
   if (rpcError) {
     console.error('[admin-invite-accept] RPC error:', rpcError);
-    return new Response(JSON.stringify({ error: 'Validációs hiba' }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Validációs hiba' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   if (!validation?.valid) {
@@ -76,7 +99,7 @@ Deno.serve(async (req: Request) => {
     };
     return new Response(
       JSON.stringify({ error: messages[reason] ?? 'Érvénytelen meghívó.' }),
-      { status: 400 },
+      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -100,7 +123,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ ok: true, message: 'Role frissítve a meglévő fiókhoz.' }),
-      { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } },
+      { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -115,7 +138,7 @@ Deno.serve(async (req: Request) => {
     console.error('[admin-invite-accept] createUser error:', signUpError);
     return new Response(
       JSON.stringify({ error: 'Regisztráció sikertelen: ' + (signUpError?.message ?? 'unknown') }),
-      { status: 500 },
+      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -138,10 +161,7 @@ Deno.serve(async (req: Request) => {
     JSON.stringify({ ok: true, user_id: newUser.user.id, email, role }),
     {
       status: 201,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     },
   );
 });

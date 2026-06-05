@@ -27,6 +27,36 @@ interface AppSettings {
   discord_webhook_url: string;
 }
 
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
+
+// Konstans idejű string-összehasonlítás (timing side-channel ellen).
+// A sima !== a karakterenkénti rövidzárlat miatt elárulhatja, hány
+// karakter egyezett – ezt elkerüljük: előbb hossz, majd XOR-akkumulátor.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // ── Helpers ────────────────────────────────────────────────────
 
 function eventEmoji(event_type: string): string {
@@ -92,21 +122,17 @@ async function sendDiscord(webhookUrl: string, text: string): Promise<void> {
 // ── Main Handler ───────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -123,7 +149,7 @@ Deno.serve(async (req: Request) => {
   if (!token) {
     return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -134,11 +160,12 @@ Deno.serve(async (req: Request) => {
     .eq('id', 'security_webhook_api_key')
     .single();
 
-  if (keyError || !keySetting?.value || keySetting.value !== token) {
+  // Konstans idejű összehasonlítás – nem a sima !== (timing side-channel ellen).
+  if (keyError || !keySetting?.value || !timingSafeEqual(String(keySetting.value), token)) {
     console.warn('[security-alert] Invalid API key attempt');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -149,7 +176,7 @@ Deno.serve(async (req: Request) => {
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -157,7 +184,7 @@ Deno.serve(async (req: Request) => {
   if (!payload.source || !payload.event_type) {
     return new Response(
       JSON.stringify({ error: 'Missing required fields: source, event_type' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
+      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -179,7 +206,7 @@ Deno.serve(async (req: Request) => {
     console.error('[security-alert] DB insert error:', insertError);
     return new Response(JSON.stringify({ error: 'Failed to save log', detail: insertError.message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -242,10 +269,7 @@ Deno.serve(async (req: Request) => {
     JSON.stringify({ ok: true, log_id: logRow.id }),
     {
       status: 201,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     },
   );
 });

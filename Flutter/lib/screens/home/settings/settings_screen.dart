@@ -265,10 +265,10 @@ class SettingsScreen extends StatelessWidget {
                       ? null
                       : () async {
                           final password = passwordCtrl.text.trim();
-                          if (password.isEmpty || password.length < 6) {
+                          if (password.isEmpty || password.length < 8) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('A jelszónak legalább 6 karakterből kell állnia!')),
+                                const SnackBar(content: Text('A jelszónak legalább 8 karakterből kell állnia!')),
                               );
                             }
                             return;

@@ -56,18 +56,20 @@ class SecurityLog extends Equatable {
   final Map<String, dynamic>? metadata;
 
   factory SecurityLog.fromJson(Map<String, dynamic> json) => SecurityLog(
-        id:          json['id'] as String,
-        createdAt:   DateTime.parse(json['created_at'] as String),
-        timestamp:   DateTime.parse(json['timestamp'] as String),
-        source:      json['source'] as String,
-        eventType:   SecurityEventType.fromString(json['event_type'] as String),
+        id:          (json['id'] as String?) ?? '',
+        createdAt:   DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+        timestamp:   DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+        source:      (json['source'] as String?) ?? 'unknown',
+        eventType:   SecurityEventType.fromString(json['event_type'] as String? ?? ''),
         ipAddress:   json['ip_address'] as String?,
         description: json['description'] as String?,
         isResolved:  (json['is_resolved'] as bool?) ?? false,
         resolvedAt:  json['resolved_at'] != null
-            ? DateTime.parse(json['resolved_at'] as String)
+            ? DateTime.tryParse(json['resolved_at'] as String? ?? '')
             : null,
-        metadata:    (json['metadata'] as Map<String, dynamic>?),
+        metadata:    json['metadata'] is Map
+            ? (json['metadata'] as Map).cast<String, dynamic>()
+            : null,
       );
 
   @override
@@ -92,9 +94,9 @@ class BannedIp extends Equatable {
   final bool isActive;
 
   factory BannedIp.fromJson(Map<String, dynamic> json) => BannedIp(
-        id:        json['id'] as String,
-        ipAddress: json['ip_address'] as String,
-        bannedAt:  DateTime.parse(json['banned_at'] as String),
+        id:        (json['id'] as String?) ?? '',
+        ipAddress: (json['ip_address'] as String?) ?? '',
+        bannedAt:  DateTime.tryParse(json['banned_at'] as String? ?? '') ?? DateTime.now(),
         reason:    json['reason'] as String?,
         jail:      json['jail'] as String?,
         isActive:  (json['is_active'] as bool?) ?? true,

@@ -24,4 +24,26 @@ class ItemsCubit extends Cubit<ItemsState> {
   }
 
   Future<void> refresh() => loadItems();
+
+  Future<void> deleteItem(String id) async {
+    try {
+      await _repo.deleteItem(id);
+      final s = state;
+      if (s is ItemsLoaded) {
+        emit(ItemsLoaded(s.items.where((i) => i.id != id).toList()));
+      }
+    } catch (e) {
+      emit(ItemsError('Törlés sikertelen: $e'));
+      await loadItems();
+    }
+  }
+
+  Future<void> updateItem(String id, {String? title, String? description}) async {
+    try {
+      await _repo.updateItem(id, title: title, description: description);
+      await loadItems();
+    } catch (e) {
+      emit(ItemsError('Módosítás sikertelen: $e'));
+    }
+  }
 }

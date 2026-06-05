@@ -4,8 +4,10 @@
  *
  * Nyilvános endpoint (auth nem szükséges).
  * Az app indulásakor (Splash screen alatt) hívja meg a kliens.
- * Visszaadja a teljes app_config táblát egyetlen JSON map-ként:
+ * Visszaadja az app_config tábla ISMERT, whitelistelt kulcsait
+ * egyetlen JSON map-ként:
  *   maintenance_mode, maintenance_message, min_app_version_*, feature_* stb.
+ *   (Ismeretlen / új kulcsok szándékosan NEM kerülnek a válaszba.)
  *
  * Cache-elhető: max-age=60 fejléc van rajta,
  * hogy ne terhelje feleslegesen az adatbázist.
@@ -43,28 +45,40 @@ interface AppConfigResponse {
 
   // Meta
   fetched_at: string;
-  [key: string]: unknown;
 }
 
-// ── CORS fejlécek ──────────────────────────────────────────────
-const corsHeaders = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-};
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
 
 // ── Main Handler ───────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -84,14 +98,18 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ error: 'Failed to load config', detail: error.message }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       },
     );
   }
 
   const configMap = (data ?? {}) as Record<string, unknown>;
 
-  // Összerakjuk a válasz objektumot – ismeretlen kulcsok is átjönnek
+  // BIZTONSÁG: csak az explicit whitelistelt kulcsokat adjuk vissza.
+  // Korábban a maradék app_config sorokat is "átszórtuk" a válaszba
+  // (...Object.fromEntries), ami azt jelentette volna, hogy egy jövőben
+  // felvett érzékeny kulcs (pl. API titok) is kiszivároghat a publikus
+  // endpointon. Ezt itt szándékosan megszüntettük – csak az ismert mezők.
   const response: AppConfigResponse = {
     maintenance_mode:           (configMap.maintenance_mode    as boolean) ?? false,
     maintenance_message:        (configMap.maintenance_message as string)  ?? '',
@@ -115,21 +133,6 @@ Deno.serve(async (req: Request) => {
     support_email: (configMap.support_email as string) ?? '',
 
     fetched_at: new Date().toISOString(),
-
-    // Összes többi kulcs átjön (jövőbeli bővíthetőség)
-    ...Object.fromEntries(
-      Object.entries(configMap).filter(([k]) =>
-        !['maintenance_mode','maintenance_message','maintenance_title',
-          'min_app_version_ios','min_app_version_android',
-          'latest_app_version_ios','latest_app_version_android',
-          'app_store_url_ios','app_store_url_android',
-          'feature_registration_enabled','feature_google_login',
-          'feature_apple_login','feature_push_notifications',
-          'feature_bug_reporter','feature_tutorial',
-          'app_name','support_email',
-        ].includes(k)
-      )
-    ),
   };
 
   return new Response(JSON.stringify(response), {
@@ -138,7 +141,7 @@ Deno.serve(async (req: Request) => {
       'Content-Type':  'application/json',
       // 60 másodperces cache – elég friss, nem terheli az adatbázist
       'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
-      ...corsHeaders,
+      ...corsHeaders(origin),
     },
   });
 });

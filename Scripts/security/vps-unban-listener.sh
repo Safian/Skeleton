@@ -29,6 +29,7 @@ fi
 
 PORT="${UNBAN_LISTENER_PORT:-9090}"
 LOGFILE="/var/log/security-monitor/unban-listener.log"
+UNBAN_SECRET="${UNBAN_LISTENER_SECRET:-}"
 mkdir -p "$(dirname "$LOGFILE")"
 
 log() { echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*" | tee -a "$LOGFILE"; }
@@ -42,6 +43,7 @@ handle_request() {
   local body=""
   local ip_address=""
   local jail="sshd"
+  local auth_header=""
 
   # HTTP fejléc beolvasása
   while IFS= read -r line; do
@@ -49,6 +51,9 @@ handle_request() {
     [[ -z "$line" ]] && break
     if [[ "$line" =~ ^Content-Length:\ ([0-9]+) ]]; then
       content_length="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$line" =~ ^X-Unban-Secret:\ (.+) ]]; then
+      auth_header="${BASH_REMATCH[1]}"
     fi
   done
 
@@ -58,6 +63,13 @@ handle_request() {
   fi
 
   log "Kapott body: $body"
+
+  # Secret ellenőrzés (ha be van állítva)
+  if [[ -n "$UNBAN_SECRET" && "$auth_header" != "$UNBAN_SECRET" ]]; then
+    log "WARN: Unauthorized unban request (wrong or missing X-Unban-Secret)"
+    printf 'HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\n\r\n{"error":"unauthorized"}'
+    return
+  fi
 
   # JSON parse (jq nélkül, egyszerű grep/sed)
   ip_address=$(echo "$body" | grep -oP '"ip_address"\s*:\s*"\K[^"]+' || true)
@@ -82,7 +94,7 @@ handle_request() {
 }
 
 export -f handle_request log
-export LOGFILE
+export LOGFILE UNBAN_SECRET
 
 # ── socat loop ─────────────────────────────────────────────────
 exec socat TCP-LISTEN:"$PORT",reuseaddr,fork \

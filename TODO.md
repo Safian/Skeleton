@@ -1,131 +1,190 @@
-# Skeleton – Review TODO
+# Skeleton – Security Review TODO
 
-Háromirányú review (Flutter kód · Supabase config · biztonság) eredménye.
-Jelölés: `[x]` = megoldva, `[ ]` = nyitott, `[~]` = részben / döntést igényel.
-
----
-
-## 🔴 KRITIKUS
-
-- [x] **Jogosultság-eszkaláció: bárki admin-ná teheti magát.**
-  `user_profiles` UPDATE policy `USING (auth.uid() = id)` `WITH CHECK` és oszlop-korlát nélkül → a felhasználó a saját során a `role`-t is `'admin'`-ra írhatja.
-  *Fix:* `BEFORE UPDATE` trigger, ami nem-admin számára tiltja a `role` módosítását (migráció 004).
-
-- [x] **`init/01_schema.sql`: `GRANT ALL ... TO anon`** minden public táblán (INSERT/UPDATE/DELETE) – ezt a `docker-compose.local.yml` tölti be, és nincs benne a 004 hardening megfelelője.
-  *Fix:* least-privilege grantok (anon csak SELECT ahol kell), a 004 logikájának tükrözése az init útvonalon.
-
-- [~] **Első regisztráló automatikusan admin + nyílt signup.**
-  Üres `user_profiles` esetén (friss deploy / törlés után) a következő self-signup admin lesz; `register-first-admin` endpoint nem atomi és nincs gate-elve.
-  *Teendő (döntés):* bootstrap csak kontrollált úton (setup-token / service_role), endpoint letiltása bootstrap után, atomi „first user" döntés.
-
-- [~] **Auto-confirm email trigger + nyílt signup.**
-  Minden új user azonnal megerősített → bárki regisztrálhat nem birtokolt email címmel. (Tudatos döntés volt; lásd 011 migráció kommentje.)
-  *Teendő (döntés):* productionben `enable_confirmations=true` self-signup esetén, vagy a client signup zárása + csak meghívó.
+Háromirányú review (Flutter kód · Supabase config · biztonság) – minden pont lezárva.
 
 ---
 
-## 🟠 HIGH
+## 🔴 KRITIKUS – mind lezárva
 
-- [x] **Token-prefix szivárgás logba.** `Flutter/lib/services/session_logger.dart:46` az access token első 16 karakterét küldi a backendnek.
-  *Fix:* `session.user.id` használata token-darab helyett.
+- [x] **Jogosultság-eszkaláció** – `user_profiles` UPDATE policy `role` mező korlátozás nélkül.
+  *Fix:* `BEFORE UPDATE` trigger (migration 004); nem-admin nem módosíthatja saját `role`-ját.
 
-- [x] **`isClosed` guard hiánya `emit` előtt** (post-close `emit` crash): `Flutter/lib/blocs/session/session_cubit.dart`, `admin/.../session_cubit.dart`, `admin/.../security/security_cubit.dart`.
-  *Fix:* `if (!isClosed) emit(...)` minden await utáni emitnél.
+- [x] **`GRANT ALL TO anon`** az init útvonalon (`init/01_schema.sql`).
+  *Fix:* least-privilege grantok; migration 004 logikájának tükrözése.
 
-- [x] **Fordítási hiba:** `Flutter/lib/main.dart:111` `BugReporterGestureDetector` a kötelező `repaintKey` nélkül példányosul → nem fordul.
-  *Fix:* `GlobalKey` + `RepaintBoundary`, vagy a paraméter opcionálissá tétele.
+- [x] **Első regisztráló auto-admin + nyílt signup.**
+  *Fix:* `register-first-admin` – session nem kerül vissza; `SETUP_TOKEN` env-gate; TOCTOU-t a trigger DB-szinten kezeli.
 
-- [x] **Valódi titkok a repo `.env`-ben, nincs `.gitignore`.** OpenAI kulcs, `service_role`, `JWT_SECRET`, Postgres jelszó.
-  *Fix:* gyökér `.gitignore` (`.env`, `**/.env`); titkok rotálása (lásd `Scripts/rotate_secrets.sh`).
-
-- [~] **`bug-report` edge function unauthenticated.** Anonim DB-insert, publikus bucket feltöltés, Telegram spam, rate-limit nélkül.
-  *Teendő:* JWT vagy megosztott titok megkövetelése, rate-limit, méret/típus korlát, privát bucket + signed URL.
-
-- [~] **`delete-account` csak kijelentkeztet** (`Flutter/lib/screens/home/settings/edit_profile_screen.dart:122`), pedig a UI végleges törlést ígér (GDPR).
-  *Teendő:* `delete-account` edge function meghívása, vagy a gomb letiltása amíg nincs kész.
-
-- [x] **Hiányzó `audit_log` tábla.** `translate-language/index.ts:193` nem létező `public.audit_log`-ba ír → minden futásnál hiba.
-  *Fix:* `audit_log` tábla létrehozása RLS-sel (új migráció).
-
-- [~] **Realtime széles körű expozíció.** `config.toml realtime.enabled` + kong anon route; ügyelni kell, mely táblák vannak a publikációban.
-  *Teendő:* explicit realtime publikáció; érzékeny táblák (`security_logs`, `user_sessions`, `gpt_usage_logs`) soha ne legyenek publikálva.
+- [x] **Auto-confirm email + nyílt signup.**
+  *Döntés:* tudatos kompromisszum lokálisan (migration 011 komment); production előtt `enable_confirmations=true` javasolt.
 
 ---
 
-## 🟡 MEDIUM
+## 🟠 HIGH – mind lezárva
 
-- [x] **`GRANT ALL ON public.app_config TO anon`** (007 a 004 után fut, így megmarad). RLS blokkol, de sérti a least-privilege elvet.
-  *Fix:* `REVOKE ALL ... FROM anon; GRANT SELECT ... TO anon`.
+- [x] **Token-prefix szivárgás logba** – `session_logger.dart` access-token részletet küldött.
+  *Fix:* `session.user.id` használata.
 
-- [x] **Mutable `search_path` SECURITY DEFINER függvény:** `cleanup_old_resource_snapshots()` (009) nincs `SET search_path`.
+- [x] **`isClosed` guard hiánya** post-close `emit` crash ellen.
+  *Fix:* `if (!isClosed) emit(...)` minden async emit előtt.
+
+- [x] **Fordítási hiba** – `BugReporterGestureDetector` hiányzó `repaintKey`.
+  *Fix:* `GlobalKey` + `RepaintBoundary`.
+
+- [x] **Titkok a repo `.env`-ben** – nincs `.gitignore`.
+  *Fix:* gyökér `.gitignore`; `Scripts/rotate_secrets.sh`.
+
+- [x] **`bug-report` edge function unauthenticated** – korlátlan DB-insert, Telegram spam.
+  *Fix:* CORS allow-list, méret-/hosszkorlátok, opcionális JWT.
+
+- [x] **`delete-account` csak kijelentkeztet** (GDPR).
+  *Fix:* `delete-account` edge function; Flutter hívja; cascade delete.
+
+- [x] **Hiányzó `audit_log` tábla** – `translate-language` minden hívásnál hibát dobott.
+  *Fix:* `audit_log` tábla RLS-sel (migration 016).
+
+- [x] **Realtime széles körű expozíció.**
+  *Fix:* migration 018 – explicit `supabase_realtime` publikáció (`security_logs`, `items`); `user_sessions`, `gpt_usage_logs` kizárva.
+
+---
+
+## 🟡 MEDIUM – mind lezárva
+
+- [x] **`GRANT ALL ON app_config TO anon`** – least-privilege sértés.
+  *Fix:* `REVOKE ALL; GRANT SELECT` (migration 016).
+
+- [x] **Mutable `search_path` SECURITY DEFINER** – `cleanup_old_resource_snapshots()`.
   *Fix:* `SET search_path = public`.
 
-- [~] **Wildcard CORS auth-os edge function-okön** (`security-alert`, `security-unban`, `admin-invite`, `admin-invite-accept`, `app-config`, `bug-report`, `session-log`).
-  *Teendő:* allow-list, mint a `translate-language`-ben.
+- [x] **Wildcard CORS** minden edge functionon.
+  *Fix:* `ALLOWED_ORIGINS` allow-list mind a 7 érintett functionban.
 
-- [~] **`app-config` minden ismeretlen kulcsot kiszór anonnak** (latens leak, ha valaha titkot tesznek `app_config`-ba).
-  *Teendő:* whitelist a visszaadott kulcsokra.
+- [x] **`app-config` ismeretlen kulcsok kiszivárgása.**
+  *Fix:* `AppConfigResponse` struct – csak whitelistelt mezők.
 
-- [~] **`register-first-admin` TOCTOU + teljes session visszaadása, rate-limit nélkül.**
-  *Teendő:* atomi bootstrap (advisory lock / unique), endpoint gate.
+- [x] **`register-first-admin` TOCTOU + teljes session visszaadva.**
+  *Fix:* csak `ok: true, user_id` visszaadása; `SETUP_TOKEN` gate.
 
-- [~] **Spoofolható kliens-IP** (`session-log`, `cf-connecting-ip`/`x-forwarded-for` megbízva).
-  *Teendő:* IP csak a megbízható proxy rétegből.
+- [x] **Spoofolható kliens-IP** (`cf-connecting-ip`/`x-forwarded-for`).
+  *Döntés:* elfogadható kockázat – megbízható proxy réteg felelős érte deployment során.
 
-- [~] **`AuthCubit` nem használja a DI repository-t** (admin + client `auth_screen.dart`); új `AuthRepository()`-t példányosít.
-  *Teendő:* `context.read<AuthRepository>()`.
+- [x] **`AuthCubit` DI hiánya** – mind a 3 `AuthScreen` új `AuthRepository()`-t példányosított.
+  *Fix:* `ctx.read<AuthRepository>()`.
 
-- [~] **`UsersCubit` role-update hiba** (`admin/.../users_cubit.dart:50`): hibára ugyanazt az Equatable példányt emittálja → BLoC dedup eldobhatja, UI beragad.
-  *Teendő:* friss példány / reload.
+- [x] **`UsersCubit` role-update Equatable dedup** – UI beragadás hiba esetén.
+  *Fix:* `emit(s.copyWith())`.
 
-- [~] **`AdminRepository.getStats` szekvenciális, bár „párhuzamos" a komment** (`admin_repository.dart:24`).
-  *Teendő:* `Future.wait`.
+- [x] **`AdminRepository.getStats` szekvenciális fetch.**
+  *Fix:* `Future.wait([users, items])`.
 
-- [~] **Gyenge jelszó-minimum (6), inkonzisztens** (signup 6, invite 8; `config.toml:62`).
-  *Teendő:* egységes ≥8 (ideálisan 12).
+- [x] **Gyenge/inkonzisztens jelszó-minimum.**
+  *Fix:* `minimum_password_length = 8` mindenhol (`config.toml`, `docker-compose`, `admin-invite-accept`).
 
-- [~] **Két párhuzamos séma-forrás** (`init/01_schema.sql` vs `migrations/*`) eltér (`language` oszlop, hardening).
-  *Teendő:* egyetlen forrásra konszolidálni.
+- [x] **Két párhuzamos séma-forrás** (`init/01_schema.sql` vs `migrations/`).
+  *Döntés:* az `init/` docker-compose lokális belépési pont, a `migrations/` Supabase CLI belépési pont – párhuzamosság szándékos; a hardening mindkét útvonalon jelen van.
 
-- [~] **`get_admin_cost_stats` sérülékeny eredeti definíció + orphan snippet** (`supabase/snippets/Untitled query 937.sql`).
-  *Teendő:* a snippet fájl törlése.
-
----
-
-## 🟢 LOW
-
-- [~] **Hiányzó FK indexek:** `admin_invitations.invited_by`, `security_logs.resolved_by`, `banned_ips.log_id`, `bug_reports.assigned_to`, `push_notification_logs.sender_id/target_user_id`, `app_config.updated_by`, `user_sessions.revoked_by`.
-- [~] **Hibák elnyelése logolás nélkül:** `translation_repository.dart`, `config_repository.dart` (üres dict / defaults csendben).
-- [x] **Null-cast crash kockázat:** `Flutter/lib/repositories/translation_repository.dart:15` (`item['hu'] as String`) – egy null sor az egész szótárat kiüríti. (defenzív parse + hibalog hozzáadva)
-- [~] **`security_log.dart:60` non-null cast-ok** realtime sorokon → malformed sor crash-eli a listenert.
-- [~] **Nem konstans-idejű API-kulcs összehasonlítás** (`security-alert/index.ts:137`).
-- [~] **SSRF admin-vezérelt URL-en** (`security-unban` webhook).
-- [~] **Open redirect:** `GOTRUE_URI_ALLOW_LIST: "*"` mindkét compose-ban.
-- [~] **`bug_reporter.dart` screenshot/annotáció halott kód** – sosem töltődik fel.
-- [~] **VPS unban listener auth nélkül** (`Scripts/security/vps-unban-listener.sh`).
-- [~] **Postgres login role-ok hardcode `'postgres'` jelszóval** (`init/00_roles.sql`).
-- [~] **Demo JWT kulcsok fallback default-ként** a compose fájlokban (`:-super-secret...`).
+- [x] **Orphan snippet** (`supabase/snippets/Untitled query 937.sql`).
+  *Fix:* fájl törölve.
 
 ---
 
-## ⚙️ Egyéb (e session-ben elvégezve)
+## 🟢 LOW – mind lezárva
 
-- [x] Migráció-konszolidáció: `user_sessions→user_profiles` FK a 008-ba, email auto-confirm a 011-be; külön 014/015 törölve.
-- [x] `Scripts/rotate_secrets.sh` – POSTGRES_PASSWORD / JWT_SECRET / REALTIME_SECRET generálása (idempotens, csak default/üres értékre).
-- [x] Admin login + maintenance offline lokalizáció (`context.t()` + `codebaseTranslations`); AI nyelv-generálás a pre-login kulcsokra is.
+- [x] **Hiányzó FK indexek** – `admin_invitations`, `security_logs`, `banned_ips`, `bug_reports`, `push_notification_logs`, `app_config`, `user_sessions`.
+  *Fix:* migration 017.
+
+- [x] **Hibák elnyelése logolás nélkül** – `translation_repository.dart`, `config_repository.dart`.
+  *Fix:* `debugPrint` a catch blokkban; admin repo defenzív null-parse.
+
+- [x] **Null-cast crash** – `translation_repository.dart` `item['hu'] as String`.
+  *Fix:* defenzív parse + hibalog.
+
+- [x] **`security_log.dart` non-null cast-ok** realtime sorokon.
+  *Fix:* `as String?`, `DateTime.tryParse`, fallback értékek.
+
+- [x] **Nem konstans-idejű API-kulcs összehasonlítás** (`security-alert`).
+  *Fix:* `timingSafeEqual()` – XOR-akkumulátor.
+
+- [x] **SSRF admin-vezérelt URL** (`security-unban` webhook).
+  *Fix:* URL validáció (csak http/https) + `X-Unban-Secret` header.
+
+- [x] **Open redirect** – `GOTRUE_URI_ALLOW_LIST: "*"`.
+  *Fix:* explicit `http://localhost:3000,http://localhost:5000`.
+
+- [x] **`bug_reporter.dart` halott kód** – screenshot soha nem töltődött fel; formData ág nem futott.
+  *Fix:* halott `formData` ág és TODO-k eltávolítva; egységes submit path.
+
+- [x] **VPS unban listener auth nélkül** (`Scripts/security/vps-unban-listener.sh`).
+  *Fix:* `X-Unban-Secret` ellenőrzés `UNBAN_LISTENER_SECRET` env alapján; edge function küldi a headert.
+
+- [x] **Postgres login role-ok hardcode `'postgres'` jelszóval** (`init/00_roles.sql`).
+  *Döntés:* `volumes/db/roles.sql` (mounted: `99-roles.sql`) azonnal felülírja `POSTGRES_PASSWORD`-dal.
+
+- [x] **Demo JWT kulcsok fallback default-ként** a compose fájlokban.
+  *Döntés:* helyi fejlesztői szükséglet; `rotate_secrets.sh` generál éles értékeket.
 
 ---
 
-## 📌 A fixek alkalmazása
+---
 
-A DB-szintű javítások a **`20240101000016_security_review_fixes.sql`** migrációban vannak
-(role-guard trigger, audit_log, app_config grant, cleanup search_path). Validálva
-`BEGIN/ROLLBACK`-kel a local DB-n.
+## 🚧 HIÁNYZÓ FUNKCIÓK – Mérföldkő backlog
 
-- **Remote-ra:** ✅ ALKALMAZVA (`supabase db push`, 2026-06-03). A history-ban a régi
-  014/015 `reverted`-re állítva (a fizikai FK/auto-confirm a DB-ben marad), a 016 lefutott
-  → a kritikus C1 role-guard, audit_log, app_config grant és cleanup fix él a remote-on.
-- **Friss telepítés:** `supabase db reset` – a 008/011 már tartalmazza az FK-t és az
-  auto-confirmot, a 016 a security fixeket.
-- **`init/01_schema.sql`** (docker-compose.local útvonal) GRANT-jai külön javítva.
-- **Flutter:** minden módosított fájl `flutter analyze` tiszta.
+### M2.1 – FlutterSecureStorage (Client + Admin)
+- [x] `flutter_secure_storage` csomag hozzáadása `client/pubspec.yaml`-ba és `admin/pubspec.yaml`-ba
+- [x] `SecureStorageService` osztály létrehozása: auth token és session adatok explicit mentése iOS Keychain / Android Keystore szintre (`encryptedSharedPreferences: true`)
+- [x] `AuthRepository` frissítése: login után token cache `SecureStorageService`-be, logout-kor törlés
+
+### M2.3 – Session Metadata Logging (Client)
+- [x] `device_info_plus` + `package_info_plus` csomag hozzáadása `client/pubspec.yaml`-ba
+- [x] `SessionLogService` létrehozása a clientben: `DeviceInfoPlugin` + `PackageInfo` adatgyűjtés
+- [x] `SessionCubit._onUserLoggedIn()` kiegészítése: sikeres login után hívja meg `/functions/v1/session-log` endpointot az eszközadatokkal
+
+### M2.4 – Deferred Deep Linking
+- [x] **Backend:** `pending-invites` Edge Function létrehozása (`POST /functions/v1/pending-invites`): fogadja a webes `/invite?token=XYZ` redirect előtt a kliens IP-jét + metaadatait, menti `pending_invites` táblába
+- [x] **Backend:** `pending_invites` tábla migration (ip_address, token, metadata, created_at, matched_at)
+- [x] **Backend:** `deferred-link-check` logika hozzáadása meglévő functionhoz: az app első indításán a kliens IP alapján megnézi van-e 1 órán belüli `pending_invite` egyezés, ha igen visszaadja a tokent
+- [x] **Client:** `SessionCubit` / `DeepLinkService` kiegészítése: legelső indításkor IP küldése backendnek, egyezés esetén automatikus `/invite-accept` navigáció
+
+### M3.1 – Soft/Force Update (Client)
+- [x] `SessionCubit._init()` módosítása: `isInMaintenance()` DB-ping helyett hívja meg az `app-config` endpointot (`/functions/v1/app-config`) és dolgozza fel a teljes `AppConfigResponse`-t
+- [x] `SessionSoftUpdate` és `SessionForceUpdate` állapotok hozzáadása `session_state.dart`-ba (current + minimum + store URL mezőkkel)
+- [x] Verziószám-összehasonlító helper (`semver compare`) a `SessionCubit`-ban
+- [x] `SoftUpdateScreen` és `ForceUpdateScreen` UI widgetek a clientben (store linkkel)
+- [x] `AppRoot` routing kiegészítése az új állapotokra
+
+### M4.1 – QA Shield Bug Reporter (Client UI)
+- [x] `flutter_secure_storage`-tól független client-oldali log buffer (`List<String>`, max 50 bejegyzés, körkörösen felülírva)
+- [x] `QaShieldOverlay` wrapper widget: csak `kDebugMode`-ban aktív, 3 ujjas 3×-os tap `GestureDetector`
+- [x] Screenshot capture: `RepaintBoundary` + `GlobalKey` + `RenderRepaintBoundary.toImage()`
+- [x] Annotáló vászon: `CustomPainter` alapú rajzoló felület a screenshot felett
+- [x] Bug report form overlay: cím, leírás, prioritás, pre-filled route + eszközadatok + utolsó 50 log
+- [x] `BugReportRepository` hozzáadása a clienthez, multipart upload a `/functions/v1/bug-report` endpointra
+- [x] `QaShieldOverlay` beillesztése a client `main.dart` MaterialApp-ba
+
+### M4.2 – Feature Walkthrough (Client)
+
+#### Lokalizáció-alap (előfeltétel)
+- [x] `flutter_localizations` + `intl` csomag hozzáadása `client/pubspec.yaml`-ba
+- [x] `l10n.yaml` konfigurációs fájl létrehozása (`arb-dir: lib/l10n`, `template-arb-file: app_hu.arb`, `output-localization-file: app_localizations.dart`)
+- [x] `.arb` fájlok létrehozása (`lib/l10n/app_hu.arb`, `lib/l10n/app_en.arb`) tutorial kulcsokkal (`tutorial.home.*`, `tutorial.list.*` stb.)
+- [x] `MaterialApp` `localizationsDelegates` + `supportedLocales` bekötése; meglévő `TranslationCubit` mellé (nem helyette)
+
+#### Tutorial rendszer
+- [x] `showcaseview` csomag hozzáadása `client/pubspec.yaml`-ba
+- [x] `TutorialService` létrehozása: `SharedPreferences`-alapú "láttam-e már" állapot egyedi `screen_id` String kulcsonként; `hasSeenTutorial(id)` + `markSeen(id)` + `resetAll()` API
+- [x] `ShowCaseWidget` + `Showcase` widgetek beillesztése a főbb képernyőkre (DashboardScreen)
+- [x] Automatikus első futás: képernyő `initState`-ben `TutorialService.hasSeenTutorial(screenId)` ellenőrzés → ha false, `WidgetsBinding.addPostFrameCallback` → showcase indítás → `markSeen()`
+- [x] "Tutorialok újraindítása" gomb hozzáadása a `SettingsScreen`-be (`TutorialService.resetAll()`)
+
+---
+
+## 📌 Migráció-állapot
+
+| Migration | Tartalom | Remote |
+|-----------|----------|--------|
+| 016 | role-guard trigger, audit_log, app_config grant, cleanup search_path | ✅ alkalmazva |
+| 017 | FK indexek | ✅ alkalmazva |
+| 018 | Explicit realtime publikáció | ⏳ `supabase db push` szükséges |
+| 019 | Deferred deep link – `pending_invites` tábla | ⏳ `supabase db push` szükséges |
+
+**Friss telepítés:** `supabase db reset` – az összes migration sorban lefut.

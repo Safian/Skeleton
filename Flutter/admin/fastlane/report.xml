@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="fastlane.lanes">
+    
+    
+    
+      
+      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000333">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="1: cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update" time="2.73326">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="2: cd .. &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT flutter build ipa --release --export-options-plist ios/ExportOptions.plist" time="66.404556">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="3: upload_to_testflight" time="103.630864">
+        
+      </testcase>
+    
+  </testsuite>
+</testsuites>

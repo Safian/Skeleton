@@ -24,7 +24,7 @@ class AuthScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => AuthCubit(),
+      create: (ctx) => AuthCubit(repository: ctx.read<AuthRepository>()),
       child: _AuthView(showPasswordReset: showPasswordReset),
     );
   }
@@ -93,8 +93,8 @@ class _AuthViewState extends State<_AuthView> {
 
     if (email.isEmpty)    { _snackError(ctx, 'Email cím kötelező!'); return; }
     if (password.isEmpty) { _snackError(ctx, 'Jelszó kötelező!'); return; }
-    if (password.length < 6) {
-      _snackError(ctx, 'A jelszónak legalább 6 karakter kell!');
+    if (password.length < 8) {
+      _snackError(ctx, 'A jelszónak legalább 8 karakter kell!');
       return;
     }
     if (!_isLogin && !_acceptedTerms) {
@@ -517,7 +517,7 @@ class _AuthViewState extends State<_AuthView> {
           _SocialLoginButton(
             label: 'Folytatás Google-lal',
             assetPath: 'assets/icons/google_logo.png',
-            fallbackIcon: LucideIcons.chrome,
+            fallbackIcon: LucideIcons.globe,
             isLoading: isLoading,
             onPressed: () => ctx.read<AuthCubit>().signInWithGoogle(),
           ),

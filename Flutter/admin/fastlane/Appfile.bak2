@@ -1,0 +1,3 @@
+app_identifier ENV["ADMIN_APP_BUNDLEID"] || "hu.safian.skeleton.admin.dev"
+apple_id ENV["APPLE_ID"] || "safian.szabolcs@gmail.com"
+team_id ENV["APPLE_TEAM_ID"] || "8R7QAX93QJ"

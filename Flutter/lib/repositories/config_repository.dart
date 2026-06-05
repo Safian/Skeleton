@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_config.dart';
 
@@ -20,7 +21,7 @@ class ConfigRepository {
       }
       return AppConfig.defaults;
     } catch (e) {
-      // Hiba esetén (pl. offline) defaults visszaadása
+      debugPrint('[ConfigRepository] fetchConfig failed: $e');
       return AppConfig.defaults;
     }
   }

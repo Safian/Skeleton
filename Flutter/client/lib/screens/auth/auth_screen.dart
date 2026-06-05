@@ -10,6 +10,7 @@ import '../../blocs/auth/auth_cubit.dart';
 import '../../blocs/auth/auth_state.dart';
 import '../../core/translation_extension.dart';
 import '../../blocs/translation/translation_cubit.dart';
+import '../../repositories/auth_repository.dart';
 
 
 // ============================================================
@@ -24,7 +25,7 @@ class AuthScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => AuthCubit(),
+      create: (ctx) => AuthCubit(repository: ctx.read<AuthRepository>()),
       child: _AuthView(showPasswordReset: showPasswordReset),
     );
   }
@@ -79,8 +80,8 @@ class _AuthViewState extends State<_AuthView> {
 
     if (email.isEmpty)    { _snackError(ctx, ctx.t('auth.err_email_required', 'Email cím kötelező!')); return; }
     if (password.isEmpty) { _snackError(ctx, ctx.t('auth.err_password_required', 'Jelszó kötelező!')); return; }
-    if (password.length < 6) {
-      _snackError(ctx, ctx.t('auth.err_password_too_short', 'A jelszónak legalább 6 karakter kell!'));
+    if (password.length < 8) {
+      _snackError(ctx, ctx.t('auth.err_password_too_short', 'A jelszónak legalább 8 karakter kell!'));
       return;
     }
     if (!_isLogin && !_acceptedTerms) {

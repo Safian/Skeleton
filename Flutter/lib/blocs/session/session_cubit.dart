@@ -3,6 +3,7 @@ import 'package:bloc/bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../repositories/auth_repository.dart';
 import '../../services/session_logger.dart'; // [M6]
+import '../../services/push_notification_service.dart';
 import 'session_state.dart';
 
 // ============================================================
@@ -47,8 +48,13 @@ class SessionCubit extends Cubit<SessionState> {
            event == AuthChangeEvent.userUpdated)) {
         await _onUserLoggedIn(session.user);
       } else if (event == AuthChangeEvent.signedOut) {
-        // Reset a session logger-t, hogy a következő login is naplózva legyen
         SessionLogger.instance.reset(); // [M6]
+        final s = state;
+        if (s is SessionLoggedIn) {
+          PushNotificationService.instance
+              .unregisterToken(s.user.id)
+              .catchError((_) {});
+        }
         emit(SessionLoggedOut());
       }
     });
@@ -68,8 +74,10 @@ class SessionCubit extends Cubit<SessionState> {
     if (profile != null) {
       emit(SessionLoggedIn(user, profile));
 
-      // [M6] Bejelentkezési metaadat naplózás (tűz és felejtsd el)
+      // [M6] Bejelentkezési metaadat naplózás
       SessionLogger.instance.log().catchError((_) {});
+      // Push token regisztráció
+      PushNotificationService.instance.registerToken(user.id).catchError((_) {});
     } else {
       // Törött session – kijelentkeztetjük
       await signOut();

@@ -1,15 +1,40 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
+import '../services/secure_storage_service.dart';
 
 // ============================================================
 // AuthRepository – Supabase auth + user_profiles CRUD
+//
+// [M2.1] Token-ek mentése FlutterSecureStorage-ba (iOS Keychain /
+//         Android Keystore) login / token-refresh eseményekkor.
 // ============================================================
 
 class AuthRepository {
   final SupabaseClient _db;
+  final SecureStorageService _secure;
 
   AuthRepository({SupabaseClient? client})
-      : _db = client ?? Supabase.instance.client;
+      : _db     = client ?? Supabase.instance.client,
+        _secure = SecureStorageService.instance {
+    _db.auth.onAuthStateChange.listen(_handleAuthStateChange);
+  }
+
+  void _handleAuthStateChange(AuthState event) {
+    final session = event.session;
+    if (session != null &&
+        (event.event == AuthChangeEvent.signedIn ||
+         event.event == AuthChangeEvent.tokenRefreshed ||
+         event.event == AuthChangeEvent.userUpdated)) {
+      _secure.saveTokens(
+        accessToken:  session.accessToken,
+        refreshToken: session.refreshToken ?? '',
+        userId:       session.user.id,
+        email:        session.user.email,
+      ).catchError((_) {});
+    } else if (event.event == AuthChangeEvent.signedOut) {
+      _secure.clearTokens().catchError((_) {});
+    }
+  }
 
   // ── Auth state ───────────────────────────────────────────
   Stream<AuthState> get authStateChanges => _db.auth.onAuthStateChange;
@@ -29,6 +54,7 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
+    await _secure.clearTokens().catchError((_) {});
     await _db.auth.signOut();
   }
 
@@ -61,8 +87,6 @@ class AuthRepository {
   // ── Health check (maintenance mode detection) ─────────────
   Future<bool> isInMaintenance() async {
     try {
-      // app_config anon-olvasható – nem kell hozzá bejelentkezés.
-      // Maintenance esetén a DB 503-at ad vissza.
       await _db.from('app_config').select('key').limit(1);
       return false;
     } on PostgrestException catch (e) {

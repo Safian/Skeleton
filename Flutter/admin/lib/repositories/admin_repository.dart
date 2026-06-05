@@ -21,11 +21,12 @@ class AdminRepository {
   // count().filter() láncolás nem támogatott supabase_flutter v2-ben,
   // ezért a szűrést Dart-ban végezzük a visszakapott listákon.
   Future<AdminStats> getStats() async {
-    final usersFuture = _db.from('user_profiles').select('id, created_at');
-    final itemsFuture = _db.from('items').select('id, is_active');
-
-    final usersRes = await usersFuture;
-    final itemsRes = await itemsFuture;
+    final results = await Future.wait([
+      _db.from('user_profiles').select('id, created_at'),
+      _db.from('items').select('id, is_active'),
+    ]);
+    final usersRes = results[0];
+    final itemsRes = results[1];
 
     final now       = DateTime.now().toUtc();
     final todayStart = DateTime.utc(now.year, now.month, now.day);

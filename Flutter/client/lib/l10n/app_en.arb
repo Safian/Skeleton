@@ -1,0 +1,23 @@
+{
+  "@@locale": "en",
+
+  "appName": "Skeleton App",
+
+  "tutorial_home_welcome_title": "Welcome!",
+  "tutorial_home_welcome_desc": "This is the home screen, from here you can access all features.",
+
+  "tutorial_home_nav_title": "Navigation",
+  "tutorial_home_nav_desc": "Use the bottom bar to switch between main sections.",
+
+  "tutorial_list_title": "List View",
+  "tutorial_list_desc": "Here you can see all items. Tap any item to view details.",
+
+  "tutorial_list_add_title": "New Item",
+  "tutorial_list_add_desc": "Use the + button to add a new item.",
+
+  "tutorial_settings_title": "Settings",
+  "tutorial_settings_desc": "Customize the app: language, notifications, profile.",
+
+  "tutorialResetButton": "Restart Tutorials",
+  "tutorialResetConfirm": "All tutorials have been reset!"
+}

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../blocs/users/users_cubit.dart';
 import '../../blocs/session/session_cubit.dart';
+import '../../blocs/session/session_state.dart';
 import '../../blocs/admin/admin_cubit.dart';
 import '../../blocs/translation/translation_cubit.dart';
 import '../../repositories/admin_repository.dart';
@@ -23,6 +25,7 @@ import 'backup/backup_screen.dart';
 import 'config/config_screen.dart';            // [M5] App Konfig & Feature Flags
 import 'sessions/sessions_screen.dart';         // [M6] Munkamenetek
 import 'bug_reports/bug_reports_screen.dart';   // [M7] Bug Riportok
+import 'deep_links/deep_links_screen.dart';     // Deep Link konfig
 
 // ============================================================
 // Admin HomeScreen – Drawer navigation
@@ -37,13 +40,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
-    // Backend fordítások betöltése – csak bejelentkezés után (authentikált).
     context.read<TranslationCubit>().loadTranslations('hu');
     context.read<AdminCubit>().initAdmin();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _appVersion = '${info.version}+${info.buildNumber}');
+    });
   }
 
   static const _tabs = [
@@ -61,10 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _TabItem(icon: LucideIcons.database,          label: 'Adatbázis'),
     _TabItem(icon: LucideIcons.activity,          label: 'Rendszernaplók'),
     _TabItem(icon: LucideIcons.bell,              label: 'Értesítések'),
+    _TabItem(icon: LucideIcons.link,              label: 'Deep Links'),
     _TabItem(icon: LucideIcons.settings,          label: 'Beállítások'),
   ];
 
-  static const int _settingsIndex = 14;
+  static const int _settingsIndex = 15;
 
   @override
   Widget build(BuildContext context) {
@@ -107,6 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
             DatabaseScreen(),
             LogsScreen(),
             NotificationsScreen(),
+            DeepLinksScreen(),
             SettingsScreen(),
           ],
         ),
@@ -121,28 +129,52 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             // ── Header ─────────────────────────────────────────────
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border(bottom: BorderSide(color: AppColors.divider)),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(LucideIcons.shield, color: AppColors.primary, size: 40),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'ADMIN PANEL',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                          fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
+            BlocBuilder<SessionCubit, SessionState>(
+              builder: (context, session) {
+                final email = session is SessionLoggedIn
+                    ? session.profile.email
+                    : '';
+                return DrawerHeader(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border(bottom: BorderSide(color: AppColors.divider)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.shield, color: AppColors.primary, size: 36),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'ADMIN PANEL',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            fontSize: 15),
+                      ),
+                      if (email.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          email,
+                          style: TextStyle(
+                              color: AppColors.onSurface.withValues(alpha: 0.55),
+                              fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (_appVersion.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'v$_appVersion',
+                          style: TextStyle(
+                              color: AppColors.primary.withValues(alpha: 0.6),
+                              fontSize: 11),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 8),
 

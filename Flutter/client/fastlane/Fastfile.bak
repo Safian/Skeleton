@@ -1,0 +1,20 @@
+default_platform(:ios)
+
+platform :ios do
+
+  desc "Build és feltöltés TestFlightba – Kliens app"
+  lane :beta do
+    # Pod install explicit (Flutter broken CocoaPods check megkerülése)
+    sh("cd ../ios && /opt/homebrew/lib/ruby/gems/4.0.0/bin/pod install --repo-update")
+
+    # Flutter release build
+    sh("cd .. && flutter build ipa --release --export-options-plist ios/ExportOptions.plist")
+
+    # TestFlight feltöltés
+    upload_to_testflight(
+      ipa: "build/ios/ipa/skeleton_app.ipa",
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+end

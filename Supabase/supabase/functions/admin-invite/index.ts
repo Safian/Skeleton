@@ -10,6 +10,24 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
+
 interface InviteBody {
   email: string;
   role?: string;
@@ -120,18 +138,17 @@ function buildInviteHtml(
 // ── Main ───────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // ── Auth: admin JWT ────────────────────────────────────────────
@@ -144,7 +161,10 @@ Deno.serve(async (req: Request) => {
 
   const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
   if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   const supabase = createClient(
@@ -156,7 +176,10 @@ Deno.serve(async (req: Request) => {
     .from('user_profiles').select('role, email').eq('id', user.id).single();
 
   if (profile?.role !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403 });
+    return new Response(JSON.stringify({ error: 'Admin only' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // ── Payload ────────────────────────────────────────────────────
@@ -164,13 +187,19 @@ Deno.serve(async (req: Request) => {
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   const { email, role = 'admin', note } = body;
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return new Response(JSON.stringify({ error: 'Valid email required' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'Valid email required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
   }
 
   // Ellenőrzés: nincs-e már aktív meghívó ehhez az e-mailhez
@@ -185,7 +214,7 @@ Deno.serve(async (req: Request) => {
   if (existing && existing.length > 0) {
     return new Response(
       JSON.stringify({ error: 'Már van aktív meghívó ehhez az e-mail címhez.' }),
-      { status: 409 },
+      { status: 409, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -200,6 +229,7 @@ Deno.serve(async (req: Request) => {
     console.error('[admin-invite] DB insert error:', invError);
     return new Response(JSON.stringify({ error: 'DB error', detail: invError?.message }), {
       status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -258,10 +288,7 @@ Deno.serve(async (req: Request) => {
     }),
     {
       status: 201,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     },
   );
 });

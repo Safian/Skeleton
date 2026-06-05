@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:flutter_localizations/flutter_localizations.dart'; // [M4.2]
 import 'core/theme/app_theme.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/items_repository.dart';
@@ -14,6 +15,11 @@ import 'screens/home/home_screen.dart';
 
 import 'repositories/translation_repository.dart';
 import 'blocs/translation/translation_cubit.dart';
+import 'screens/auth/invite_accept_screen.dart';
+import 'services/deep_link_service.dart';
+import 'widgets/qa_shield/qa_shield_overlay.dart'; // [M4.1]
+import 'screens/update_screens.dart';           // [M3.1]
+import 'services/push_notification_service.dart';
 
 // ============================================================
 // main.dart – belépési pont
@@ -39,7 +45,8 @@ Future<void> main() async {
 
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
 
-  // Alapértelmezett dark téma aktiválása
+  await PushNotificationService.instance.initialize();
+
   AppTheme.useDark();
 
   final authRepository  = AuthRepository();
@@ -56,6 +63,8 @@ Future<void> main() async {
 // ============================================================
 // SkeletonApp – root widget
 // ============================================================
+
+final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
 
 class SkeletonApp extends StatelessWidget {
   final AuthRepository authRepository;
@@ -89,9 +98,22 @@ class SkeletonApp extends StatelessWidget {
           builder: (context, translationState) {
             return MaterialApp(
               title: 'Skeleton App',
+              // [M4.2] Localization delegates
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('hu'),
+                Locale('en'),
+                Locale('de'),
+              ],
               debugShowCheckedModeBanner: false,
               theme: AppTheme.buildMaterial(dark: true),
-              home: const AppRoot(),
+              navigatorKey: _navKey,
+              onGenerateRoute: _generateRoute,
+              home: const _DeepLinkInit(child: QaShieldOverlay(child: AppRoot())),
             );
           },
         ),
@@ -119,7 +141,20 @@ class AppRoot extends StatelessWidget {
         builder: (context, state) {
           return switch (state) {
             SessionBooting()       => const SplashScreen(),
-            SessionMaintenance()   => const _MaintenanceScreen(),
+            SessionMaintenance(:final title, :final message) => _MaintenanceScreen(
+                title:   title,
+                message: message,
+              ),
+            SessionForceUpdate(:final currentVersion, :final requiredVersion, :final storeUrl) => ForceUpdateScreen(
+                currentVersion:  currentVersion,
+                requiredVersion: requiredVersion,
+                storeUrl:        storeUrl,
+              ),
+            SessionSoftUpdate(:final currentVersion, :final latestVersion, :final storeUrl) => SoftUpdateScreen(
+                currentVersion: currentVersion,
+                latestVersion:  latestVersion,
+                storeUrl:       storeUrl,
+              ),
             SessionLoggedOut()     => const AuthScreen(),
             SessionLoggedIn()      => const HomeScreen(),
             SessionPasswordRecovery() => const AuthScreen(showPasswordReset: true),
@@ -132,9 +167,46 @@ class AppRoot extends StatelessWidget {
 }
 
 
+Route<dynamic>? _generateRoute(RouteSettings settings) {
+  if (settings.name == '/invite-accept') {
+    final token = settings.arguments as String? ?? '';
+    if (token.isNotEmpty) {
+      return MaterialPageRoute(
+        builder: (_) => InviteAcceptScreen(token: token),
+        settings: settings,
+      );
+    }
+  }
+  return null;
+}
+
+class _DeepLinkInit extends StatefulWidget {
+  final Widget child;
+  const _DeepLinkInit({required this.child});
+  @override
+  State<_DeepLinkInit> createState() => _DeepLinkInitState();
+}
+
+class _DeepLinkInitState extends State<_DeepLinkInit> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeepLinkService.instance.initialize(_navKey);
+    });
+  }
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 // ── Maintenance képernyő ──────────────────────────────────────
 class _MaintenanceScreen extends StatelessWidget {
-  const _MaintenanceScreen();
+  final String title;
+  final String message;
+  const _MaintenanceScreen({
+    this.title   = 'Karbantartás alatt',
+    this.message = 'Az alkalmazás jelenleg karbantartás alatt van. Kérjük, próbáld meg később.',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -149,11 +221,12 @@ class _MaintenanceScreen extends StatelessWidget {
               Icon(Icons.build_rounded, size: 64,
                   color: AppColors.warning),
               const SizedBox(height: 24),
-              Text('Karbantartás alatt',
-                  style: AppTypography.titleLarge),
+              Text(title, style: AppTypography.titleLarge),
               const SizedBox(height: 12),
               Text(
-                'Az alkalmazás jelenleg karbantartás alatt van. Kérjük, próbáld meg később.',
+                message.isNotEmpty
+                    ? message
+                    : 'Az alkalmazás jelenleg karbantartás alatt van. Kérjük, próbáld meg később.',
                 style: AppTypography.bodyMedium
                     .copyWith(color: AppColors.onBackground.withValues(alpha: 0.6)),
                 textAlign: TextAlign.center,

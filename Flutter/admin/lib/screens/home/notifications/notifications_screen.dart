@@ -69,12 +69,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     setState(() => _sending = true);
     try {
       final response = await _db.functions.invoke(
-        'send-push-notification',
+        'send-push',
         body: {
-          'title': title,
-          'body': body,
-          'targetGroup': _targetGroup,
-          if (_targetUserId != null) 'targetUserId': _targetUserId,
+          'title':          title,
+          'body':           body,
+          'target_group':   _targetGroup,
+          if (_targetUserId != null) 'target_user_id': _targetUserId,
         },
       );
       if (response.status == 200) {

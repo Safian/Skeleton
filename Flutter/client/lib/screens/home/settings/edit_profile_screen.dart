@@ -122,9 +122,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _deleteAccount() async {
     setState(() => _isDeleting = true);
     try {
-      // TODO: Implement via Supabase edge function ('delete-account')
-      // or a PostgreSQL RPC that deletes the user and all related data.
-      // await Supabase.instance.client.functions.invoke('delete-account');
+      await Supabase.instance.client.functions.invoke('delete-account');
       if (mounted) {
         await context.read<SessionCubit>().signOut();
       }

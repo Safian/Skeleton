@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../blocs/users/users_cubit.dart';
 import '../../../blocs/users/users_state.dart';
 import '../../../models/user_profile.dart';
+import '../../../repositories/invitation_repository.dart';
 import 'user_detail_screen.dart';
 
 // ============================================================
@@ -29,11 +30,111 @@ class _UsersScreenState extends State<UsersScreen> {
     super.dispose();
   }
 
+  void _showInviteSheet(BuildContext context) {
+    final emailCtrl = TextEditingController();
+    final noteCtrl  = TextEditingController();
+    bool sending = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSt) => Padding(
+          padding: EdgeInsets.only(
+            left: AppSpacing.lg, right: AppSpacing.lg,
+            top: AppSpacing.lg,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(children: [
+                Icon(LucideIcons.userPlus, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Text('Admin meghívó küldése', style: AppTypography.titleSmall),
+              ]),
+              const SizedBox(height: AppSpacing.md),
+              AppTextField(
+                controller: emailCtrl,
+                label: 'Email cím',
+                hint: 'admin@example.com',
+                prefixIcon: LucideIcons.mail,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppTextField(
+                controller: noteCtrl,
+                label: 'Megjegyzés (opcionális)',
+                hint: 'pl. Marketing csapat',
+                prefixIcon: LucideIcons.messageSquare,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: sending ? 'Küldés...' : 'Meghívó küldése',
+                icon: LucideIcons.send,
+                isLoading: sending,
+                onTap: sending ? null : () async {
+                  final email = emailCtrl.text.trim();
+                  if (email.isEmpty) return;
+                  setSt(() => sending = true);
+                  try {
+                    await InvitationRepository().sendInvitation(
+                      email: email,
+                      note: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                    );
+                    if (sheetCtx.mounted) {
+                      Navigator.pop(sheetCtx);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Meghívó elküldve: $email'),
+                        backgroundColor: AppColors.success,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      setSt(() => sending = false);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Hiba: $e'),
+                        backgroundColor: AppColors.error,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: null,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showInviteSheet(context),
+        icon: const Icon(LucideIcons.userPlus),
+        label: const Text('Meghívó'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
       body: Column(
         children: [
           // Keresőmező

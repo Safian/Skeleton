@@ -21,25 +21,50 @@ interface BugReportPayload {
   logs?:        string[];
 }
 
-// ── CORS ───────────────────────────────────────────────────────
+// ── CORS allow-list ────────────────────────────────────────────
+// Wildcard '*' helyett explicit allow-list (lásd translate-language).
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  // Add your production admin URL here, e.g.:
+  // 'https://admin.yourdomain.com',
+];
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-};
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  };
+}
+
+// ── Abuse-guard limitek ────────────────────────────────────────
+// FONTOS: ez az endpoint szándékosan anonim (a tesztelők nincsenek
+// mindig bejelentkezve), ezért JWT-t NEM teszünk kötelezővé.
+// Service_role kulccsal fut, ezért a visszaélés ellen méret- és
+// hosszkorlátokat vezetünk be, hogy ne lehessen vele a DB-t / Storage-ot
+// teleszemetelni vagy nagy fájlokkal terhelni.
+const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_TITLE_LEN        = 200;
+const MAX_DESCRIPTION_LEN  = 5000;
+const MAX_ROUTE_LEN        = 200;
+const MAX_LOGS_ENTRIES     = 200;
+const MAX_LOG_ENTRY_LEN    = 2000;
 
 // ── Main Handler ───────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
+  const origin = req.headers.get('origin');
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(origin) });
   }
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -77,7 +102,7 @@ Deno.serve(async (req: Request) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: 'Invalid multipart form' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
@@ -85,7 +110,7 @@ Deno.serve(async (req: Request) => {
     if (!jsonStr || typeof jsonStr !== 'string') {
       return new Response(JSON.stringify({ error: 'Missing "data" field in form' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
@@ -94,12 +119,19 @@ Deno.serve(async (req: Request) => {
     } catch {
       return new Response(JSON.stringify({ error: 'Invalid JSON in "data" field' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
     const screenshotFile = formData.get('screenshot');
     if (screenshotFile instanceof File) {
+      // Abuse-guard: a 2 MB-nál nagyobb screenshotot visszautasítjuk.
+      if (screenshotFile.size > MAX_SCREENSHOT_BYTES) {
+        return new Response(
+          JSON.stringify({ error: 'Screenshot too large (max 2MB)' }),
+          { status: 413, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
+        );
+      }
       screenshotBytes = new Uint8Array(await screenshotFile.arrayBuffer());
       screenshotMime  = screenshotFile.type || 'image/png';
     }
@@ -110,7 +142,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
   }
@@ -119,7 +151,24 @@ Deno.serve(async (req: Request) => {
   if (!payload.title?.trim()) {
     return new Response(JSON.stringify({ error: 'Missing required field: title' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+  }
+
+  // Abuse-guard: hosszkorlátok a szöveges mezőkön, hogy ne lehessen
+  // a service_role-os endpointtal a DB-t óriási payloadokkal terhelni.
+  if (
+    payload.title.length > MAX_TITLE_LEN ||
+    (payload.description?.length ?? 0) > MAX_DESCRIPTION_LEN ||
+    (payload.route_name?.length ?? 0) > MAX_ROUTE_LEN ||
+    (Array.isArray(payload.logs) && (
+      payload.logs.length > MAX_LOGS_ENTRIES ||
+      payload.logs.some((l) => typeof l === 'string' && l.length > MAX_LOG_ENTRY_LEN)
+    ))
+  ) {
+    return new Response(JSON.stringify({ error: 'Payload field too large' }), {
+      status: 413,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
@@ -148,7 +197,7 @@ Deno.serve(async (req: Request) => {
     console.error('[bug-report] DB insert error:', insertError);
     return new Response(
       JSON.stringify({ error: 'Failed to save bug report', detail: insertError.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
     );
   }
 
@@ -234,7 +283,7 @@ Deno.serve(async (req: Request) => {
     JSON.stringify({ ok: true, bug_id: bugId, screenshot_url: screenshotUrl }),
     {
       status:  201,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     },
   );
 });

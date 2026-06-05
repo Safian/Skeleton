@@ -1,0 +1,42 @@
+{
+  "@@locale": "hu",
+
+  "appName": "Skeleton App",
+  "@appName": { "description": "Az alkalmazás neve" },
+
+  "tutorial_home_welcome_title": "Üdvözöljük!",
+  "@tutorial_home_welcome_title": { "description": "Főképernyő tutorial – első lépés címe" },
+
+  "tutorial_home_welcome_desc": "Ez a főképernyő, innen érheted el az összes funkciót.",
+  "@tutorial_home_welcome_desc": { "description": "Főképernyő tutorial – első lépés leírása" },
+
+  "tutorial_home_nav_title": "Navigáció",
+  "@tutorial_home_nav_title": { "description": "Főképernyő tutorial – navigáció lépés" },
+
+  "tutorial_home_nav_desc": "Az alsó sávban váltogathatsz a főbb oldalak között.",
+  "@tutorial_home_nav_desc": { "description": "Főképernyő tutorial – navigáció leírás" },
+
+  "tutorial_list_title": "Lista nézet",
+  "@tutorial_list_title": { "description": "Lista képernyő tutorial – cím" },
+
+  "tutorial_list_desc": "Itt láthatod az összes elemet. Koppints bármelyikre a részletek megtekintéséhez.",
+  "@tutorial_list_desc": { "description": "Lista képernyő tutorial – leírás" },
+
+  "tutorial_list_add_title": "Új elem",
+  "@tutorial_list_add_title": { "description": "Lista képernyő tutorial – hozzáadás gomb" },
+
+  "tutorial_list_add_desc": "Az + gombbal új elemet adhatsz hozzá.",
+  "@tutorial_list_add_desc": { "description": "Lista képernyő tutorial – hozzáadás leírás" },
+
+  "tutorial_settings_title": "Beállítások",
+  "@tutorial_settings_title": { "description": "Beállítások tutorial – cím" },
+
+  "tutorial_settings_desc": "Itt személyre szabhatod az alkalmazást: nyelv, értesítések, profil.",
+  "@tutorial_settings_desc": { "description": "Beállítások tutorial – leírás" },
+
+  "tutorialResetButton": "Tutorialok újraindítása",
+  "@tutorialResetButton": { "description": "Gomb szövege a Beállítások képernyőn" },
+
+  "tutorialResetConfirm": "Minden tutorial visszaállítva!",
+  "@tutorialResetConfirm": { "description": "Snackbar üzenet tutorial reset után" }
+}

@@ -22,7 +22,7 @@ const Map<String, Map<String, String>> codebaseTranslations = {
   'auth.err_email_empty': {'hu': 'Kérlek add meg az email címedet!', 'en': 'Please enter your email address!'},
   'auth.err_email_required': {'hu': 'Email cím kötelező!', 'en': 'Email address is required!'},
   'auth.err_password_required': {'hu': 'Jelszó kötelező!', 'en': 'Password is required!'},
-  'auth.err_password_too_short': {'hu': 'A jelszónak legalább 6 karakter kell!', 'en': 'Password must be at least 6 characters!'},
+  'auth.err_password_too_short': {'hu': 'A jelszónak legalább 8 karakter kell!', 'en': 'Password must be at least 8 characters!'},
   'auth.err_accept_terms': {'hu': 'Fogadd el a felhasználási feltételeket!', 'en': 'Please accept the terms and conditions!'},
   'auth.error': {'hu': 'Hiba', 'en': 'Error'},
   'auth.err_load_doc_failed': {'hu': 'Nem sikerült betölteni a dokumentumot.', 'en': 'Failed to load document.'},

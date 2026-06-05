@@ -20,7 +20,9 @@ import 'screens/auth/invite_accept_screen.dart'; // [M2]
 import 'screens/maintenance_screen.dart';
 import 'screens/update_required_screen.dart';
 import 'screens/home/home_screen.dart';
-import 'services/bug_reporter.dart'; // [M7]
+import 'services/bug_reporter.dart';            // [M7]
+import 'services/deep_link_service.dart';
+import 'services/push_notification_service.dart';
 
 // ============================================================
 // main.dart – belépési pont
@@ -43,6 +45,8 @@ Future<void> main() async {
 
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
 
+  await PushNotificationService.instance.initialize();
+
   AppTheme.useDark();
 
   runApp(SkeletonApp(
@@ -57,9 +61,9 @@ Future<void> main() async {
 // SkeletonApp – root widget
 // ============================================================
 
-// [M7] Stabil kulcs a bug-reporter screenshot RepaintBoundary-jához.
-// Top-level final, hogy ne generálódjon újra minden buildnél.
-final GlobalKey _bugRepaintKey = GlobalKey();
+// Stabil kulcsok – top-level, ne generálódjon újra minden buildnél.
+final GlobalKey _bugRepaintKey        = GlobalKey();
+final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
 
 class SkeletonApp extends StatelessWidget {
   final AuthRepository authRepository;
@@ -104,10 +108,9 @@ class SkeletonApp extends StatelessWidget {
               title: 'Skeleton App',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.buildMaterial(dark: true),
+              navigatorKey: _navKey,
 
-              // ── Deep link / named route kezelés ──────────────
-              // Invite-accept: /invite-accept?token=<uuid>
-              // OAuth callback: supabase_flutter kezeli automatikusan
+              // Named routes – deep link handler is ezt használja
               onGenerateRoute: _generateRoute,
 
               // [M7] QA Bug Reporter – csak debug/staging buildben aktív
@@ -123,7 +126,7 @@ class SkeletonApp extends StatelessWidget {
                       )
                   : null,
 
-              home: const AppRoot(),
+              home: const _DeepLinkInit(child: AppRoot()),
             );
           },
         ),
@@ -132,12 +135,11 @@ class SkeletonApp extends StatelessWidget {
   }
 
   static Route<dynamic>? _generateRoute(RouteSettings settings) {
-    final uri = Uri.tryParse(settings.name ?? '');
-    if (uri == null) return null;
-
-    // /invite-accept?token=<uuid>
-    if (uri.path == '/invite-accept') {
-      final token = uri.queryParameters['token'] ?? '';
+    // Deep link service arguments-ként adja át a tokent
+    if (settings.name == '/invite-accept') {
+      final token = settings.arguments as String? ??
+          Uri.tryParse(settings.name ?? '')
+              ?.queryParameters['token'] ?? '';
       if (token.isNotEmpty) {
         return MaterialPageRoute(
           builder: (_) => InviteAcceptScreen(token: token),
@@ -145,9 +147,33 @@ class SkeletonApp extends StatelessWidget {
         );
       }
     }
-
     return null;
   }
+}
+
+// ── Deep link inicializáló widget ────────────────────────────────
+// Az első build után indítja el a DeepLinkService-t, amikor
+// a navigatorKey már be van kötve.
+
+class _DeepLinkInit extends StatefulWidget {
+  final Widget child;
+  const _DeepLinkInit({required this.child});
+
+  @override
+  State<_DeepLinkInit> createState() => _DeepLinkInitState();
+}
+
+class _DeepLinkInitState extends State<_DeepLinkInit> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeepLinkService.instance.initialize(_navKey);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 // ============================================================

@@ -48,7 +48,7 @@ class UsersCubit extends Cubit<UsersState> {
       emit(s.copyWith(users: updated));
     } catch (e) {
       emit(UsersError('Szerepkör módosítás sikertelen: $e'));
-      emit(s); // visszaállás
+      emit(s.copyWith()); // friss példány – Equatable dedup elkerülése
     }
   }
 }

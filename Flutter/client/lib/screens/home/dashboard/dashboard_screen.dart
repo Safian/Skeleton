@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-
 import '../../../core/components/components.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../blocs/session/session_cubit.dart';
 import '../../../blocs/session/session_state.dart';
+import '../../../widgets/tutorial/tutorial_showcase.dart';
 
 // ============================================================
-// DashboardScreen – Tab 1 (dummy, projekthez igazítandó)
+// DashboardScreen – Tab 1
+// [M4.2] ShowCaseWidget + TutorialAutoLaunch integráció
 // ============================================================
 
 class DashboardScreen extends StatelessWidget {
@@ -16,7 +17,37 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<SessionCubit>().state;
+    return ShowCaseWrapper(
+      builder: (ctx) => _DashboardBody(showcaseCtx: ctx),
+    );
+  }
+}
+
+class _DashboardBody extends StatefulWidget {
+  final BuildContext showcaseCtx;
+  const _DashboardBody({required this.showcaseCtx});
+
+  @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+class _DashboardBodyState extends State<_DashboardBody> {
+  final _keyWelcome = GlobalKey();
+  final _keyStats   = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    TutorialAutoLaunch.schedule(
+      context: widget.showcaseCtx,
+      screenId: 'dashboard',
+      keys: [_keyWelcome, _keyStats],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state   = context.watch<SessionCubit>().state;
     final profile = state is SessionLoggedIn ? state.profile : null;
 
     return Scaffold(
@@ -34,28 +65,32 @@ class DashboardScreen extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
                         AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Üdvözöljük! 👋',
-                                  style: AppTypography.eyebrow),
-                              const SizedBox(height: 4),
-                              Text(
-                                profile?.displayNameOrEmail ?? 'Felhasználó',
-                                style: AppTypography.titleLarge,
-                              ),
-                            ],
+                    child: TutorialStep(
+                      globalKey: _keyWelcome,
+                      title: 'Üdvözöljük!',
+                      description: 'Ez a főképernyő, innen érheted el az összes funkciót.',
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Üdvözöljük! 👋', style: AppTypography.eyebrow),
+                                const SizedBox(height: 4),
+                                Text(
+                                  profile?.displayNameOrEmail ?? 'Felhasználó',
+                                  style: AppTypography.titleLarge,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        AppAvatar(
-                          name: profile?.displayNameOrEmail,
-                          imageUrl: profile?.avatarUrl,
-                          size: 44,
-                        ),
-                      ],
+                          AppAvatar(
+                            name: profile?.displayNameOrEmail,
+                            imageUrl: profile?.avatarUrl,
+                            size: 44,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -68,22 +103,27 @@ class DashboardScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const AppSectionHeader(title: 'Áttekintés'),
-                        Row(
-                          children: [
-                            Expanded(child: _StatCard(
-                              icon: LucideIcons.users,
-                              label: 'Felhasználók',
-                              value: '128',
-                              color: AppColors.primary,
-                            )),
-                            const SizedBox(width: AppSpacing.md),
-                            Expanded(child: _StatCard(
-                              icon: LucideIcons.trendingUp,
-                              label: 'Növekedés',
-                              value: '+12%',
-                              color: AppColors.secondary,
-                            )),
-                          ],
+                        TutorialStep(
+                          globalKey: _keyStats,
+                          title: 'Statisztikák',
+                          description: 'Az alkalmazás legfontosabb mutatói egy helyen.',
+                          child: Row(
+                            children: [
+                              Expanded(child: _StatCard(
+                                icon: LucideIcons.users,
+                                label: 'Felhasználók',
+                                value: '128',
+                                color: AppColors.primary,
+                              )),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(child: _StatCard(
+                                icon: LucideIcons.trendingUp,
+                                label: 'Növekedés',
+                                value: '+12%',
+                                color: AppColors.secondary,
+                              )),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.md),
                         Row(
@@ -111,8 +151,7 @@ class DashboardScreen extends StatelessWidget {
                 // Gyors műveletek
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -178,8 +217,7 @@ class DashboardScreen extends StatelessWidget {
                                 trailing: Text(item.$3,
                                     style: AppTypography.bodySmall),
                                 leading: Container(
-                                  width: 36,
-                                  height: 36,
+                                  width: 36, height: 36,
                                   decoration: BoxDecoration(
                                     color: AppColors.primary.withValues(alpha: 0.12),
                                     shape: BoxShape.circle,
@@ -211,14 +249,12 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-
   const _StatCard({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
   });
-
   @override
   Widget build(BuildContext context) {
     return AppCard(
@@ -227,8 +263,7 @@ class _StatCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 36, height: 36,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(AppRadius.sm + 2),
@@ -236,8 +271,7 @@ class _StatCard extends StatelessWidget {
             child: Icon(icon, size: 18, color: color),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text(value,
-              style: AppTypography.titleLarge.copyWith(color: color)),
+          Text(value, style: AppTypography.titleLarge.copyWith(color: color)),
           const SizedBox(height: 2),
           Text(label, style: AppTypography.bodySmall),
         ],

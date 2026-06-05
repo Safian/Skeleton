@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../blocs/items/items_cubit.dart';
 import '../../../core/components/components.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/item.dart';
@@ -120,9 +122,7 @@ class DetailScreen extends StatelessWidget {
             AppButton(
               label: 'Szerkesztés',
               icon: LucideIcons.pencil,
-              onTap: () {
-                // TODO: szerkesztő megnyitása
-              },
+              onTap: () => _showEditSheet(context),
             ),
             const SizedBox(height: AppSpacing.sm),
             AppButton(
@@ -139,6 +139,84 @@ class DetailScreen extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     return '${dt.year}.${dt.month.toString().padLeft(2, '0')}.${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  void _showEditSheet(BuildContext context) {
+    final titleCtrl = TextEditingController(text: item.title);
+    final descCtrl  = TextEditingController(text: item.description ?? '');
+    final cubit     = context.read<ItemsCubit>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.lg, right: AppSpacing.lg,
+          top: AppSpacing.lg,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text('Szerkesztés', style: AppTypography.titleSmall),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: titleCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Cím',
+                labelStyle: TextStyle(color: AppColors.onSurface.withValues(alpha: 0.6)),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: descCtrl,
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Leírás',
+                labelStyle: TextStyle(color: AppColors.onSurface.withValues(alpha: 0.6)),
+                filled: true,
+                fillColor: AppColors.background,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppButton(
+              label: 'Mentés',
+              icon: LucideIcons.save,
+              onTap: () {
+                cubit.updateItem(
+                  item.id,
+                  title: titleCtrl.text.trim(),
+                  description: descCtrl.text.trim(),
+                );
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showOptions(BuildContext context) {
@@ -202,9 +280,9 @@ class DetailScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
+              context.read<ItemsCubit>().deleteItem(item.id);
               Navigator.pop(context);
               Navigator.pop(context);
-              // TODO: context.read<ItemsCubit>().deleteItem(item.id)
             },
             child: Text('Törlés',
                 style: TextStyle(color: AppColors.error)),
