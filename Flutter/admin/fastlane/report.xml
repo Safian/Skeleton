@@ -5,22 +5,27 @@
     
     
       
-      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000329">
+      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000173">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="1: cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update" time="2.520595">
+      <testcase classname="fastlane.lanes" name="1: app_store_connect_api_key" time="0.001551">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="2: cd .. &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT flutter build ipa --release --export-options-plist ios/ExportOptions.plist" time="67.066513">
+      <testcase classname="fastlane.lanes" name="2: cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update" time="1.108149">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="3: upload_to_testflight" time="98.925454">
+      <testcase classname="fastlane.lanes" name="3: cd .. &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT flutter build ipa --release --export-options-plist ios/ExportOptions.plist" time="44.732734">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="4: upload_to_testflight" time="84.084693">
         
       </testcase>
     

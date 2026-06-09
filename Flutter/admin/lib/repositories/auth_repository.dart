@@ -1,5 +1,5 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user_profile.dart';
 import '../services/secure_storage_service.dart';
 
 // ============================================================
@@ -82,6 +82,49 @@ class AuthRepository {
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
     await _db.from('user_profiles').update(updates).eq('id', userId);
+  }
+
+  // ── Legal documents ──────────────────────────────────────────────
+  /// Returns active legal documents not yet accepted by [userId].
+  Future<List<LegalDocument>> getPendingLegalDocuments(String userId) async {
+    try {
+      final docs = await _db
+          .from('legal_documents')
+          .select()
+          .eq('is_active', true);
+      if (docs.isEmpty) return [];
+
+      final accepted = await _db
+          .from('legal_document_acceptances')
+          .select('document_id, version')
+          .eq('user_id', userId);
+
+      final acceptedKeys = <String>{
+        for (final a in (accepted as List))
+          '${a['document_id']}:${a['version']}'
+      };
+
+      return (docs as List)
+          .map((d) => LegalDocument.fromJson(d as Map<String, dynamic>))
+          .where((doc) => !acceptedKeys.contains('${doc.id}:${doc.version}'))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Records acceptance of a legal document version.
+  Future<void> acceptLegalDocument(
+    String userId,
+    String documentId,
+    String version,
+  ) async {
+    await _db.from('legal_document_acceptances').upsert({
+      'user_id': userId,
+      'document_id': documentId,
+      'version': version,
+      'accepted_at': DateTime.now().toUtc().toIso8601String(),
+    });
   }
 
   // ── Health check (maintenance mode detection) ─────────────

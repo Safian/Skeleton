@@ -35,28 +35,42 @@ class _QaShieldOverlayState extends State<QaShieldOverlay> {
   final GlobalKey _repaintKey = GlobalKey();
 
   // Tap detektor – 3 ujjas 3x-os koppintás
+  final Set<int> _activePointers = {};
+  bool _threeFingersRegistered = false;
   int _tapCount = 0;
   DateTime? _lastTap;
   static const _requiredTaps = 3;
-  static const _window = Duration(seconds: 1);
+  static const _requiredFingers = 3;
+  static const _window = Duration(seconds: 2);
 
   void _onPointerDown(PointerDownEvent event) {
     if (!kDebugMode) return;
+    _activePointers.add(event.pointer);
 
-    final now = DateTime.now();
-    if (_lastTap == null || now.difference(_lastTap!) > _window) {
-      _tapCount = 0;
+    // Csak akkor számolunk, ha egyszerre pontosan _requiredFingers ujj van lent
+    if (_activePointers.length == _requiredFingers && !_threeFingersRegistered) {
+      _threeFingersRegistered = true;
+      final now = DateTime.now();
+      if (_lastTap == null || now.difference(_lastTap!) > _window) {
+        _tapCount = 0;
+      }
+      _lastTap = now;
+      _tapCount++;
+      if (_tapCount >= _requiredTaps) {
+        _tapCount = 0;
+        _trigger();
+      }
     }
+  }
 
-    // Csak 3 ujj esetén számolunk
-    // (event.buttons jelzi az ujjakat mobil-on; desktopra 1 ujj is elég debug-ban)
-    _lastTap = now;
-    _tapCount++;
+  void _onPointerUp(PointerUpEvent event) {
+    _activePointers.remove(event.pointer);
+    if (_activePointers.isEmpty) _threeFingersRegistered = false;
+  }
 
-    if (_tapCount >= _requiredTaps) {
-      _tapCount = 0;
-      _trigger();
-    }
+  void _onPointerCancel(PointerCancelEvent event) {
+    _activePointers.remove(event.pointer);
+    if (_activePointers.isEmpty) _threeFingersRegistered = false;
   }
 
   Future<void> _trigger() async {
@@ -91,6 +105,8 @@ class _QaShieldOverlayState extends State<QaShieldOverlay> {
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,
+      onPointerUp: _onPointerUp,
+      onPointerCancel: _onPointerCancel,
       child: RepaintBoundary(
         key: _repaintKey,
         child: Stack(

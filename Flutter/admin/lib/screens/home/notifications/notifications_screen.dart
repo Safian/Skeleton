@@ -1,8 +1,8 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../repositories/admin_repository.dart';
 
 // ============================================================
@@ -80,10 +80,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (response.status == 200) {
         _titleCtrl.clear();
         _bodyCtrl.clear();
+        final data = response.data as Map<String, dynamic>?;
+        final isDemo = data?['demo_mode'] == true;
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Push üzenet sikeresen elküldve!'),
-              backgroundColor: Colors.green,
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(isDemo
+                  ? '⚠️ Demo mód – FCM nincs beállítva, az üzenet csak DB-be logolódott.\n'
+                    'Setup: app_settings → fcm_server_key (console.firebase.google.com)'
+                  : 'Push üzenet sikeresen elküldve!'),
+              backgroundColor: isDemo ? Colors.orange.shade700 : Colors.green,
+              duration: Duration(seconds: isDemo ? 6 : 3),
               behavior: SnackBarBehavior.floating));
         }
         _loadLogs();
@@ -173,12 +179,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       DropdownMenuItem(
                           value: 'all',
                           child: Text('Mindenki')),
-                      DropdownMenuItem(
-                          value: 'subscribers',
-                          child: Text('Csak előfizetők')),
-                      DropdownMenuItem(
-                          value: 'non_subscribers',
-                          child: Text('Nem előfizetők')),
+                      // 'subscribers' / 'non_subscribers' opciók nem elérhetők:
+                      // a user_profiles táblában nincs előfizetési mező,
+                      // az edge function sem szűr rájuk.
                     ],
                     onChanged: (v) {
                       if (v != null) setState(() => _targetGroup = v);
@@ -290,7 +293,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final status  = row['status'] as String? ?? '';
     final count   = row['tokens_count'] as int? ?? 0;
     final created = DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal();
-    final ok      = status == 'success';
+    final ok      = status == 'sent'; // send-push edge function 'sent'|'failed' értékkel logol
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

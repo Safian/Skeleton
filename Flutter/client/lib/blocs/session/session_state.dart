@@ -1,9 +1,12 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:equatable/equatable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../models/user_profile.dart';
 
 // ============================================================
-// SessionState – globális auth állapotgép
+// SessionState – auth állapotgép
+//
+// Maintenance mód és verzióellenőrzés a ConfigCubit-ban él – [M5]
+// A SessionCubit kizárólag az auth életciklust kezeli.
 // ============================================================
 
 abstract class SessionState extends Equatable {
@@ -15,48 +18,13 @@ abstract class SessionState extends Equatable {
 /// App indulása, Supabase inicializálás
 class SessionBooting extends SessionState {}
 
-/// Karbantartási üzemmód  [M3.1]
-class SessionMaintenance extends SessionState {
-  final String title;
-  final String message;
-  const SessionMaintenance({
-    this.title   = 'Karbantartás',
-    this.message = '',
-  });
+/// Nincs bejelentkezett felhasználó (opcionális force-logout üzenet)
+class SessionLoggedOut extends SessionState {
+  final String? message;
+  const SessionLoggedOut({this.message});
   @override
-  List<Object?> get props => [title, message];
+  List<Object?> get props => [message];
 }
-
-/// Ajánlott frissítés – az app folytatható  [M3.1]
-class SessionSoftUpdate extends SessionState {
-  final String currentVersion;
-  final String latestVersion;
-  final String storeUrl;
-  const SessionSoftUpdate({
-    required this.currentVersion,
-    required this.latestVersion,
-    required this.storeUrl,
-  });
-  @override
-  List<Object?> get props => [currentVersion, latestVersion, storeUrl];
-}
-
-/// Kötelező frissítés – az app nem folytatható  [M3.1]
-class SessionForceUpdate extends SessionState {
-  final String currentVersion;
-  final String requiredVersion;
-  final String storeUrl;
-  const SessionForceUpdate({
-    required this.currentVersion,
-    required this.requiredVersion,
-    required this.storeUrl,
-  });
-  @override
-  List<Object?> get props => [currentVersion, requiredVersion, storeUrl];
-}
-
-/// Nincs bejelentkezett felhasználó
-class SessionLoggedOut extends SessionState {}
 
 /// Sikeres bejelentkezés
 class SessionLoggedIn extends SessionState {
@@ -69,3 +37,18 @@ class SessionLoggedIn extends SessionState {
 
 /// Password-reset link megnyitása után
 class SessionPasswordRecovery extends SessionState {}
+
+/// Karbantartási mód — a szerver ideiglenesen nem elérhető
+class SessionMaintenance extends SessionState {}
+
+/// Bejelentkezés után elfogadandó jogi dokumentumok vannak
+class SessionAcceptLegal extends SessionState {
+  final User user;
+  final UserProfile profile;
+  final List<LegalDocument> pendingDocuments;
+
+  const SessionAcceptLegal(this.user, this.profile, this.pendingDocuments);
+
+  @override
+  List<Object?> get props => [user.id, profile, pendingDocuments];
+}

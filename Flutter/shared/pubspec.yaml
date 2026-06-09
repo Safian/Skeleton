@@ -1,0 +1,20 @@
+name: skeleton_shared
+description: Skeleton – megosztott UI komponensek, téma és modellek (client + admin)
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.12.0
+  equatable: ^2.0.5
+  google_fonts: ^6.2.1
+  lucide_icons_flutter: ^3.1.0
+  shared_preferences: ^2.3.0
+  firebase_messaging: ^15.2.4
+
+flutter:
+  uses-material-design: true

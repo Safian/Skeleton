@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 13+ (API 33+) megköveteli a futásidejű engedélykérést a push
+         értesítések megjelenítéséhez. A min SDK 29, így a fut. engedélykérést
+         (PushNotificationsHelper.requestPermission() jellegű hívás) az app
+         indulásakor mindenképp el kell végezni 33+ eszközökön. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="skeleton_app"
         android:name="${applicationName}"

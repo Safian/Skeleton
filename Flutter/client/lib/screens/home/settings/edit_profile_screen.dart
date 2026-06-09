@@ -1,3 +1,4 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -5,8 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../blocs/session/session_cubit.dart';
 import '../../../blocs/session/session_state.dart';
-import '../../../core/components/components.dart';
-import '../../../core/theme/app_theme.dart';
 
 // ============================================================
 // EditProfileScreen – Profil szerkesztése képernyő

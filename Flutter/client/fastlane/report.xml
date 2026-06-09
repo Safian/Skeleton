@@ -5,22 +5,19 @@
     
     
       
-      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000264">
+      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000164">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="1: cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update" time="2.907621">
+      <testcase classname="fastlane.lanes" name="1: app_store_connect_api_key" time="0.001222">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="2: cd .. &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT flutter build ipa --release --export-options-plist ios/ExportOptions.plist" time="88.070024">
+      <testcase classname="fastlane.lanes" name="2: cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update" time="0.212832">
         
-      </testcase>
-    
-      
-      <testcase classname="fastlane.lanes" name="3: upload_to_testflight" time="124.65127">
+          <failure message="/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/actions/actions_helper.rb:67:in &apos;Fastlane::Actions.execute_action&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/fast_file.rb:224:in &apos;Fastlane::FastFile.sh&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/fast_file.rb:216:in &apos;Fastlane::FastFile#sh&apos;&#10;Fastfile:32:in &apos;block (2 levels) in Fastlane::FastFile#parsing_binding&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/lane.rb:41:in &apos;Fastlane::Lane#call&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/runner.rb:49:in &apos;block in Fastlane::Runner#execute&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/runner.rb:45:in &apos;Dir.chdir&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/runner.rb:45:in &apos;Fastlane::Runner#execute&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/lane_manager.rb:46:in &apos;Fastlane::LaneManager.cruise_lane&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/command_line_handler.rb:34:in &apos;Fastlane::CommandLineHandler.handle&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/commands_generator.rb:110:in &apos;block (2 levels) in Fastlane::CommandsGenerator#run&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/commander-4.6.0/lib/commander/command.rb:187:in &apos;Commander::Command#call&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/commander-4.6.0/lib/commander/command.rb:157:in &apos;Commander::Command#run&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/commander-4.6.0/lib/commander/runner.rb:444:in &apos;Commander::Runner#run_active_command&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane_core/lib/fastlane_core/ui/fastlane_runner.rb:124:in &apos;Commander::Runner#run!&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/commander-4.6.0/lib/commander/delegates.rb:18:in &apos;Commander::Delegates#run!&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/commands_generator.rb:363:in &apos;Fastlane::CommandsGenerator#run&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/commands_generator.rb:43:in &apos;Fastlane::CommandsGenerator.start&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/fastlane/lib/fastlane/cli_tools_distributor.rb:132:in &apos;Fastlane::CLIToolsDistributor.take_off&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/gems/fastlane-2.235.0/bin/fastlane:23:in &apos;&lt;top (required)&gt;&apos;&#10;/opt/homebrew/Cellar/ruby/4.0.5/lib/ruby/4.0.0/rubygems.rb:305:in &apos;Kernel#load&apos;&#10;/opt/homebrew/Cellar/ruby/4.0.5/lib/ruby/4.0.0/rubygems.rb:305:in &apos;Gem.activate_and_load_bin_path&apos;&#10;/opt/homebrew/Cellar/fastlane/2.235.0/libexec/bin/fastlane:25:in &apos;&lt;main&gt;&apos;&#10;&#10;Exit status of command &apos;cd ../ios &amp;&amp; env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update&apos; was 1 instead of 0.&#10;&#10;[!] Invalid `Podfile` file: cannot load such file -- /Users/szabi/develop/flutter/packages/flutter_tools/bin/podhelper.&#10;&#10; #  from /Users/szabi/Documents/Projects/Safian/Skeleton/Flutter/client/ios/Podfile:26&#10; #  -------------------------------------------&#10; #  &#10; &gt;  require File.expand_path(File.join(&apos;packages&apos;, &apos;flutter_tools&apos;, &apos;bin&apos;, &apos;podhelper&apos;), flutter_root)&#10; #  &#10; #  -------------------------------------------&#10;" />
         
       </testcase>
     

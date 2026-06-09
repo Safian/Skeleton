@@ -1,8 +1,8 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/theme/app_theme.dart';
 
 // ============================================================
 // DatabaseScreen – DB table overview via Supabase information_schema
@@ -41,8 +41,8 @@ class _DatabaseScreenState extends State<DatabaseScreen> {
       // translations uses 'key' as PK, legal_documents has composite PK — select * for those
       final futures = knownTables.map((t) async {
         try {
-          final res = await _db.from(t).select().limit(5000);
-          return _TableInfo(name: t, rowCount: (res as List).length, reachable: true);
+          final rowCount = await _db.from(t).count();
+          return _TableInfo(name: t, rowCount: rowCount, reachable: true);
         } catch (_) {
           return _TableInfo(name: t, rowCount: 0, reachable: false);
         }

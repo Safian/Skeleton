@@ -1,8 +1,7 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/security_log.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_sizes.dart';
 
 class BannedIpsSheet extends StatelessWidget {
   const BannedIpsSheet({
@@ -89,7 +88,7 @@ class BannedIpsSheet extends StatelessWidget {
                           color: AppColors.surfaceVariant,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: Colors.red.withOpacity(0.3),
+                            color: Colors.red.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(

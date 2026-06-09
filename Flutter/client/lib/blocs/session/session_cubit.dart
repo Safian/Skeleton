@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
-import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../repositories/auth_repository.dart';
 import '../../services/push_notification_service.dart';
@@ -9,12 +8,18 @@ import '../../services/session_log_service.dart';
 import 'session_state.dart';
 
 // ============================================================
-// SessionCubit – auth életciklus kezelő (top-level)
+// SessionCubit – auth életciklus kezelő
+//
+// Kizárólag az auth állapotot kezeli.
+// Maintenance mód + verzióellenőrzés → ConfigCubit  [M5]
 // ============================================================
 
 class SessionCubit extends Cubit<SessionState> {
   final AuthRepository _repo;
   StreamSubscription<AuthState>? _authSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _profileSub;
+  bool _handleInProgress = false;
+  String? _pendingSignOutMessage;
 
   SessionCubit({required AuthRepository repository})
       : _repo = repository,
@@ -23,37 +28,11 @@ class SessionCubit extends Cubit<SessionState> {
   }
 
   Future<void> _init() async {
-    // [M3.1] App-config lekérés (maintenance + verzió check)
-    try {
-      final client = Supabase.instance.client;
-      final res = await client.functions.invoke('app-config');
-      final cfg = (res.data as Map<String, dynamic>?) ?? {};
-
-      if (cfg['maintenance_mode'] == true) {
-        final title   = cfg['maintenance_title']   as String? ?? 'Karbantartás';
-        final message = cfg['maintenance_message'] as String? ?? '';
-        if (!isClosed) emit(SessionMaintenance(title: title, message: message));
-        return;
-      }
-
-      final versionState = await _checkVersion(cfg);
-      if (versionState != null) {
-        if (!isClosed) emit(versionState);
-        return;
-      }
-    } catch (e) {
-      debugPrint('[SessionCubit] app-config fetch error: $e');
-      if (await _repo.isInMaintenance()) {
-        if (!isClosed) emit(const SessionMaintenance());
-        return;
-      }
-    }
-
     final user = _repo.currentUser;
     if (user != null) {
       await _onUserLoggedIn(user);
     } else {
-      if (!isClosed) emit(SessionLoggedOut());
+      if (!isClosed) emit(const SessionLoggedOut());
     }
 
     _authSub = _repo.authStateChanges.listen((authState) async {
@@ -68,79 +47,101 @@ class SessionCubit extends Cubit<SessionState> {
            event == AuthChangeEvent.userUpdated)) {
         await _onUserLoggedIn(session.user);
       } else if (event == AuthChangeEvent.signedOut) {
-        if (!isClosed) emit(SessionLoggedOut());
+        _profileSub?.cancel();
+        _profileSub = null;
+        final msg = _pendingSignOutMessage;
+        _pendingSignOutMessage = null;
+        if (!isClosed) emit(SessionLoggedOut(message: msg));
       }
     });
   }
 
-  // [M3.1] Verziószám összehasonlítás
-  Future<SessionState?> _checkVersion(Map<String, dynamic> cfg) async {
-    try {
-      final pkg = await PackageInfo.fromPlatform();
-      final current = pkg.version;
-
-      final bool isAndroid = defaultTargetPlatform == TargetPlatform.android;
-      final minKey    = isAndroid ? 'min_app_version_android'    : 'min_app_version_ios';
-      final latestKey = isAndroid ? 'latest_app_version_android' : 'latest_app_version_ios';
-      final urlKey    = isAndroid ? 'app_store_url_android'      : 'app_store_url_ios';
-
-      final minVersion    = cfg[minKey]    as String? ?? '1.0.0';
-      final latestVersion = cfg[latestKey] as String? ?? '1.0.0';
-      final storeUrl      = cfg[urlKey]    as String? ?? '';
-
-      if (_cmpVersion(current, minVersion) < 0) {
-        return SessionForceUpdate(
-          currentVersion: current,
-          requiredVersion: minVersion,
-          storeUrl: storeUrl,
-        );
-      }
-      if (_cmpVersion(current, latestVersion) < 0) {
-        return SessionSoftUpdate(
-          currentVersion: current,
-          latestVersion: latestVersion,
-          storeUrl: storeUrl,
-        );
-      }
-    } catch (e) {
-      debugPrint('[SessionCubit] version check error: $e');
-    }
-    return null;
-  }
-
-  int _cmpVersion(String a, String b) {
-    List<int> p(String v) =>
-        v.split('.').map((s) => int.tryParse(s) ?? 0).toList();
-    final av = p(a); final bv = p(b);
-    final len = av.length > bv.length ? av.length : bv.length;
-    for (var i = 0; i < len; i++) {
-      final diff = (i < av.length ? av[i] : 0) - (i < bv.length ? bv[i] : 0);
-      if (diff != 0) return diff;
-    }
-    return 0;
-  }
-
   Future<void> _onUserLoggedIn(User user) async {
-    var profile = await _repo.getUserProfile(user.id);
+    if (_handleInProgress) return;
+    _handleInProgress = true;
 
-    if (profile == null) {
-      await Future.delayed(const Duration(seconds: 2));
-      profile = await _repo.getUserProfile(user.id);
-    }
+    try {
+      var profile = await _repo.getUserProfile(user.id);
 
-    if (isClosed) return;
+      if (profile == null) {
+        await Future.delayed(const Duration(seconds: 2));
+        profile = await _repo.getUserProfile(user.id);
+      }
 
-    if (profile != null) {
+      if (isClosed) return;
+
+      if (profile == null) {
+        await signOut();
+        return;
+      }
+
+      // Maintenance check
+      final inMaintenance = await _repo.isInMaintenance();
+      if (inMaintenance) {
+        if (!isClosed) emit(SessionMaintenance());
+        return;
+      }
+
+      // Pending legal documents check
+      final pendingDocs = await _repo.getPendingLegalDocuments(user.id);
+      if (pendingDocs.isNotEmpty) {
+        if (!isClosed) emit(SessionAcceptLegal(user, profile, pendingDocs));
+        return;
+      }
+
       emit(SessionLoggedIn(user, profile));
+      _subscribeToProfileRealtime(user.id, profile);
       PushNotificationService.instance.registerToken(user.id).catchError((_) {});
       // [M2.3] Eszközadatok + geo logolása
       SessionLogService.instance.logSession().catchError((_) {});
-    } else {
-      await signOut();
+    } finally {
+      _handleInProgress = false;
     }
   }
 
-  Future<void> signOut() async {
+  /// Realtime subscription on user_profiles — detects force-logout triggers:
+  ///   • role downgrade (admin→user)
+  ///   • is_deleted = true (account deactivated)
+  void _subscribeToProfileRealtime(String userId, UserProfile currentProfile) {
+    _profileSub?.cancel();
+    _profileSub = Supabase.instance.client
+        .from('user_profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', userId)
+        .listen((rows) {
+          if (rows.isEmpty || isClosed) return;
+          try {
+            final updated = UserProfile.fromJson(rows.first);
+
+            if (updated.isDeleted == true) {
+              signOut(message: 'A fiókod törölve lett.');
+              return;
+            }
+
+            if (_isRoleDowngrade(currentProfile.role, updated.role)) {
+              signOut(message: 'A fiókod jogosultsága megváltozott. Kérjük jelentkezz be újra.');
+              return;
+            }
+
+            // Optimistic profile update for non-critical changes
+            final s = state;
+            if (s is SessionLoggedIn && !isClosed) {
+              emit(SessionLoggedIn(s.user, updated));
+            }
+          } catch (_) {}
+        }, onError: (_) {});
+  }
+
+  bool _isRoleDowngrade(String oldRole, String newRole) {
+    const hierarchy = {'admin': 2, 'user': 1};
+    return (hierarchy[newRole] ?? 0) < (hierarchy[oldRole] ?? 0);
+  }
+
+  Future<void> signOut({String? message}) async {
+    _profileSub?.cancel();
+    _profileSub = null;
+    _pendingSignOutMessage = message;
+
     final s = state;
     if (s is SessionLoggedIn) {
       await PushNotificationService.instance
@@ -158,21 +159,39 @@ class SessionCubit extends Cubit<SessionState> {
     }
   }
 
-
-  /// [M3.1] SoftUpdate képernyőn a "Később" gomb után – továbblép a login/home felé.
-  Future<void> skipSoftUpdate() async {
-    final user = _repo.currentUser;
-    if (user != null) {
-      await _onUserLoggedIn(user);
-    } else {
-      if (!isClosed) emit(SessionLoggedOut());
+  /// Optimistically updates the in-memory profile without a DB round-trip.
+  void updateProfile(UserProfile updated) {
+    final s = state;
+    if (s is SessionLoggedIn && !isClosed) {
+      emit(SessionLoggedIn(s.user, updated));
     }
+  }
+
+  /// Accepts a legal document and re-checks if any pending documents remain.
+  Future<void> acceptDocument(String documentId, String version) async {
+    final s = state;
+    if (s is! SessionAcceptLegal) return;
+
+    try {
+      await _repo.acceptLegalDocument(s.user.id, documentId, version);
+      final remaining = await _repo.getPendingLegalDocuments(s.user.id);
+      if (isClosed) return;
+
+      if (remaining.isEmpty) {
+        emit(SessionLoggedIn(s.user, s.profile));
+        _subscribeToProfileRealtime(s.user.id, s.profile);
+        PushNotificationService.instance.registerToken(s.user.id).catchError((_) {});
+        SessionLogService.instance.logSession().catchError((_) {});
+      } else {
+        emit(SessionAcceptLegal(s.user, s.profile, remaining));
+      }
+    } catch (_) {}
   }
 
   @override
   Future<void> close() {
     _authSub?.cancel();
+    _profileSub?.cancel();
     return super.close();
   }
 }
-

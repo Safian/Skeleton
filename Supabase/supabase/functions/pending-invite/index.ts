@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── CORS ─────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
@@ -75,7 +76,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (error) {
-      console.error('[pending-invite] check error:', error);
+      await logError({ fn: 'pending-invite', error, context: { step: 'check_ip' } });
       return new Response(JSON.stringify({ found: false }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
@@ -141,7 +142,7 @@ Deno.serve(async (req: Request) => {
       );
 
     if (error) {
-      console.error('[pending-invite] insert error:', error);
+      await logError({ fn: 'pending-invite', error, context: { step: 'insert' } });
       return new Response(JSON.stringify({ error: 'Failed to save invite' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },

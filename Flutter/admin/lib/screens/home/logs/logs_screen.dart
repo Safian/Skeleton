@@ -1,7 +1,7 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../repositories/admin_repository.dart';
 
 // ============================================================

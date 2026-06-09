@@ -1,6 +1,5 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
-import '../core/theme/app_theme.dart';
-import '../core/components/components.dart';
 
 // ============================================================
 // SplashScreen – induláskor látható töltőképernyő

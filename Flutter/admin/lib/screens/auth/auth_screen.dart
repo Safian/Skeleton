@@ -1,9 +1,8 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../core/components/components.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/translation_extension.dart';
 import '../../repositories/auth_repository.dart';
 import '../../blocs/auth/auth_cubit.dart';

@@ -31,8 +31,17 @@ Supabase/.branches/
 **/generated_plugin_registrant.dart
 **/lib/l10n/app_localizations*.dart
 
+# ── Flutter gép-specifikus generált fájlok ───────────────────
+# Tartalmaz helyi elérési utakat (/Users/...) – ne kerüljön VCS-be
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/android/local.properties
+# Fastlane bak fájlok
+**/fastlane/Appfile.bak*
+
 # ── OS / IDE ─────────────────────────────────────────────────
 .DS_Store
 *.swp
 .idea/
 .vscode/
+.aider*

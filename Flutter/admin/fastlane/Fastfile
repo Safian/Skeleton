@@ -1,9 +1,33 @@
 default_platform(:ios)
 
+# ── App Store Connect API Key ───────────────────────────────────
+# .p8 fájl: <project_root>/.keys/<APPLE_APPTUNESCONNECT_FILENAME>
+# key_id: automatikusan kinyerve a fájlnévből (AuthKey_<KEY_ID>.p8)
+# issuer_id: APPLE_APPTUNESCONNECT_ISSUER_ID env változóból
+PROJECT_ROOT = File.expand_path("../../..", File.dirname(__FILE__))
+
+def connect_api_key
+  filename  = ENV.fetch("APPLE_APPTUNESCONNECT_FILENAME")
+  key_id    = filename.match(/AuthKey_(.+)\.p8/)&.captures&.first
+  raise "Cannot extract key_id from APPLE_APPTUNESCONNECT_FILENAME=#{filename}" unless key_id
+  issuer_id = ENV.fetch("APPLE_APPTUNESCONNECT_ISSUER_ID")
+  raise "APPLE_APPTUNESCONNECT_ISSUER_ID is not set" if issuer_id.empty?
+  key_filepath = File.join(PROJECT_ROOT, ".keys", filename)
+  raise "API key file not found: #{key_filepath}" unless File.exist?(key_filepath)
+
+  app_store_connect_api_key(
+    key_id:       key_id,
+    issuer_id:    issuer_id,
+    key_filepath: key_filepath
+  )
+end
+
 platform :ios do
 
   desc "Build és feltöltés TestFlightba – Admin app"
   lane :beta do
+    api_key = connect_api_key
+
     # Pod install explicit (Flutter broken CocoaPods check megkerülése)
     sh("cd ../ios && env -u GEM_HOME -u GEM_PATH -u BUNDLE_GEMFILE -u RUBYOPT pod install --repo-update")
 
@@ -12,8 +36,8 @@ platform :ios do
 
     # TestFlight feltöltés
     upload_to_testflight(
-      ipa: "build/ios/ipa/skeleton_admin.ipa",
-      team_id: "1247261",
+      api_key:                           api_key,
+      ipa:                               "build/ios/ipa/skeleton_admin.ipa",
       skip_waiting_for_build_processing: true
     )
   end

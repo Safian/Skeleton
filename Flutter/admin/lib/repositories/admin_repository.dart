@@ -1,8 +1,6 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user_profile.dart';
 import '../models/admin_stats.dart';
-import '../models/translation_entry.dart';
-import '../models/legal_document.dart';
 import '../models/ai_model.dart';
 
 // ============================================================
@@ -170,10 +168,13 @@ class AdminRepository {
 
   Future<void> updateLegalDocument(LegalDocument doc) async {
     if (doc.isActive) {
+      // Deaktiváljuk az ugyanolyan típusú dokumentum összes többi verzióját,
+      // de a most mentendő verziót NEM (azt az upsert állítja be).
       await _db
           .from('legal_documents')
           .update({'is_active': false})
-          .eq('id', doc.id);
+          .eq('id', doc.id)
+          .neq('version', doc.version);
     }
     final data = {
       'id': doc.id,
@@ -190,8 +191,8 @@ class AdminRepository {
 
   // ── app_settings ─────────────────────────────────────────────
   Future<List<Map<String, dynamic>>> fetchAppSettings() async {
-    return (_db.from('app_settings').select().order('id') as dynamic)
-        .then((r) => (r as List).cast<Map<String, dynamic>>());
+    final res = await _db.from('app_settings').select().order('id');
+    return (res as List).cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>?> getAppSetting(String id) async {
@@ -233,6 +234,8 @@ class AdminRepository {
   }
 
   Future<void> setDefaultAiModel(String id) async {
+    // Előbb töröljük az összes default jelölést, majd beállítjuk az újat.
+    await _db.from('ai_models').update({'is_default': false});
     await _db.from('ai_models').update({'is_default': true}).eq('id', id);
   }
 

@@ -1,7 +1,7 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../models/ai_model.dart';
 import '../../../repositories/admin_repository.dart';
 
@@ -508,7 +508,7 @@ class _AiScreenState extends State<AiScreen> {
                 SwitchListTile(
                   value: isDefault,
                   title: const Text('Alapértelmezett', style: TextStyle(color: Colors.white)),
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   onChanged: (v) => setS(() => isDefault = v),
                 ),
               ],

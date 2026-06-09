@@ -1,9 +1,8 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../models/security_log.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_sizes.dart';
 
 class SecurityLogTile extends StatelessWidget {
   const SecurityLogTile({
@@ -65,7 +64,7 @@ class SecurityLogTile extends StatelessWidget {
           leading: Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 18, color: color),
@@ -113,13 +112,13 @@ class SecurityLogTile extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.network, size: 11, color: color.withOpacity(0.7)),
+                      Icon(LucideIcons.network, size: 11, color: color.withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
                       Text(
                         log.ipAddress!,
                         style: TextStyle(
                           fontSize: 12,
-                          color: color.withOpacity(0.9),
+                          color: color.withValues(alpha: 0.9),
                           fontFamily: 'monospace',
                         ),
                       ),

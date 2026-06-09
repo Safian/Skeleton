@@ -1,25 +1,28 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart'; // [M4.2]
-import 'core/theme/app_theme.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/items_repository.dart';
+import 'repositories/translation_repository.dart';
 import 'blocs/session/session_cubit.dart';
 import 'blocs/session/session_state.dart';
+import 'blocs/config/config_cubit.dart';                // [M5]
+import 'blocs/config/config_state.dart';                // [M5]
+import 'blocs/translation/translation_cubit.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/auth_screen.dart';
-import 'screens/home/home_screen.dart';
-
-import 'repositories/translation_repository.dart';
-import 'blocs/translation/translation_cubit.dart';
 import 'screens/auth/invite_accept_screen.dart';
-import 'services/deep_link_service.dart';
-import 'widgets/qa_shield/qa_shield_overlay.dart'; // [M4.1]
-import 'screens/update_screens.dart';           // [M3.1]
+import 'screens/home/home_screen.dart';
+import 'screens/maintenance_screen.dart';               // [M5]
+import 'screens/update_required_screen.dart';           // [M5]
+import 'screens/legal_accept_screen.dart';
+import 'services/deep_link_handler.dart';
 import 'services/push_notification_service.dart';
+import 'widgets/qa_shield/qa_shield_overlay.dart';      // [M4.1]
 
 // ============================================================
 // main.dart – belépési pont
@@ -32,31 +35,30 @@ import 'services/push_notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // .env betöltése
   await dotenv.load(fileName: '.env');
 
   final supabaseUrl     = dotenv.env['SUPABASE_URL']     ?? '';
   final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
-  assert(supabaseUrl.isNotEmpty,
-      'SUPABASE_URL hiányzik a .env fájlból!');
-  assert(supabaseAnonKey.isNotEmpty,
-      'SUPABASE_ANON_KEY hiányzik a .env fájlból!');
+  assert(supabaseUrl.isNotEmpty,     'SUPABASE_URL hiányzik a .env fájlból!');
+  assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY hiányzik a .env fájlból!');
+
+  // Clear corrupt Supabase localStorage keys on web (no-op on native)
+  clearSupabaseLocalStorage();
 
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+
+  // Init centralised error logger
+  LogService.instance.init(Supabase.instance.client);
 
   await PushNotificationService.instance.initialize();
 
   AppTheme.useDark();
 
-  final authRepository  = AuthRepository();
-  final itemsRepository = ItemsRepository();
-  final translationRepository = TranslationRepository();
-
   runApp(SkeletonApp(
-    authRepository:  authRepository,
-    itemsRepository: itemsRepository,
-    translationRepository: translationRepository,
+    authRepository:        AuthRepository(),
+    itemsRepository:       ItemsRepository(),
+    translationRepository: TranslationRepository(),
   ));
 }
 
@@ -88,17 +90,22 @@ class SkeletonApp extends StatelessWidget {
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider(create: (_) => SessionCubit(repository: authRepository)),
+          // [M5] Remote Config – legkorábban inicializálódik
+          BlocProvider(
+            create: (_) => ConfigCubit()..load(),
+          ),
+          BlocProvider(
+            create: (_) => SessionCubit(repository: authRepository),
+          ),
           BlocProvider(
             create: (_) => TranslationCubit(repository: translationRepository)
               ..loadTranslations('hu'),
           ),
         ],
         child: BlocBuilder<TranslationCubit, TranslationState>(
-          builder: (context, translationState) {
+          builder: (context, _) {
             return MaterialApp(
               title: 'Skeleton App',
-              // [M4.2] Localization delegates
               localizationsDelegates: const [
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
@@ -113,7 +120,13 @@ class SkeletonApp extends StatelessWidget {
               theme: AppTheme.buildMaterial(dark: true),
               navigatorKey: _navKey,
               onGenerateRoute: _generateRoute,
-              home: const _DeepLinkInit(child: QaShieldOverlay(child: AppRoot())),
+              home: const _DeepLinkInit(
+                child: QaShieldOverlay(
+                  child: ForegroundPushOverlay(
+                    child: AppRoot(),
+                  ),
+                ),
+              ),
             );
           },
         ),
@@ -123,49 +136,99 @@ class SkeletonApp extends StatelessWidget {
 }
 
 // ============================================================
-// AppRoot – routing az állapotgép alapján
+// AppRoot – routing prioritásrendben
+//
+// 1. Config (maintenance / force / soft update)  [M5]
+// 2. Auth (logged in / out / password recovery)
+//
+// A ConfigCubit és SessionCubit párhuzamosan tölt –
+// amíg a config még nincs kész, a session SplashScreen-t mutat.
 // ============================================================
 
-class AppRoot extends StatelessWidget {
+class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
 
   @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  /// Soft update esetén a felhasználó elutasíthatja – ilyenkor true
+  bool _softUpdateSkipped = false;
+
+  @override
   Widget build(BuildContext context) {
-    return BlocListener<SessionCubit, SessionState>(
-      listener: (context, state) {
-        if (state is SessionLoggedIn) {
-          context.read<TranslationCubit>().loadTranslations(state.profile.language);
+    return BlocConsumer<ConfigCubit, ConfigState>(
+      // Amikor a config betöltési állapota megváltozik, reset a skip flagre
+      listenWhen: (prev, curr) => prev.status != curr.status,
+      listener: (context, configState) {
+        if (!RemoteConfig.instance.maintenanceMode) {
+          setState(() => _softUpdateSkipped = false);
         }
       },
-      child: BlocBuilder<SessionCubit, SessionState>(
-        builder: (context, state) {
-          return switch (state) {
-            SessionBooting()       => const SplashScreen(),
-            SessionMaintenance(:final title, :final message) => _MaintenanceScreen(
-                title:   title,
-                message: message,
-              ),
-            SessionForceUpdate(:final currentVersion, :final requiredVersion, :final storeUrl) => ForceUpdateScreen(
-                currentVersion:  currentVersion,
-                requiredVersion: requiredVersion,
-                storeUrl:        storeUrl,
-              ),
-            SessionSoftUpdate(:final currentVersion, :final latestVersion, :final storeUrl) => SoftUpdateScreen(
-                currentVersion: currentVersion,
-                latestVersion:  latestVersion,
-                storeUrl:       storeUrl,
-              ),
-            SessionLoggedOut()     => const AuthScreen(),
-            SessionLoggedIn()      => const HomeScreen(),
-            SessionPasswordRecovery() => const AuthScreen(showPasswordReset: true),
-            _ => const SplashScreen(),
-          };
-        },
-      ),
+      builder: (context, configState) {
+        // ── 1. Maintenance mode ─────────────────────────────
+        if (configState.isLoaded && RemoteConfig.instance.maintenanceMode) {
+          return const MaintenanceScreen();
+        }
+
+        // ── 2. Force update ─────────────────────────────────
+        if (configState.isLoaded && configState.forceUpdate) {
+          return const UpdateRequiredScreen(isForce: true);
+        }
+
+        // ── 3. Soft update (ha nem utasítottuk el) ──────────
+        if (configState.isLoaded &&
+            configState.softUpdate &&
+            !_softUpdateSkipped) {
+          return UpdateRequiredScreen(
+            isForce: false,
+            onSkip: () => setState(() => _softUpdateSkipped = true),
+          );
+        }
+
+        // ── 4. Auth routing ─────────────────────────────────
+        return BlocConsumer<SessionCubit, SessionState>(
+          listener: (context, sessionState) {
+            if (sessionState is SessionLoggedIn) {
+              context
+                  .read<TranslationCubit>()
+                  .loadTranslations(sessionState.profile.language);
+            }
+            // Force-logout message
+            if (sessionState is SessionLoggedOut &&
+                sessionState.message != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                  SnackBar(
+                    content: Text(sessionState.message!),
+                    backgroundColor: Colors.red.shade700,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              });
+            }
+          },
+          builder: (context, sessionState) {
+            return switch (sessionState) {
+              SessionBooting()          => const SplashScreen(),
+              SessionLoggedOut()        => const AuthScreen(),
+              SessionLoggedIn()         => const HomeScreen(),
+              SessionPasswordRecovery() => const AuthScreen(showPasswordReset: true),
+              SessionMaintenance()      => const MaintenanceScreen(),
+              SessionAcceptLegal()      => LegalAcceptScreen(
+                                            state: sessionState,
+                                          ),
+              _                         => const SplashScreen(),
+            };
+          },
+        );
+      },
     );
   }
 }
 
+// ── Named route generator ──────────────────────────────────────
 
 Route<dynamic>? _generateRoute(RouteSettings settings) {
   if (settings.name == '/invite-accept') {
@@ -180,9 +243,12 @@ Route<dynamic>? _generateRoute(RouteSettings settings) {
   return null;
 }
 
+// ── Deep link init + routing ───────────────────────────────────
+
 class _DeepLinkInit extends StatefulWidget {
   final Widget child;
   const _DeepLinkInit({required this.child});
+
   @override
   State<_DeepLinkInit> createState() => _DeepLinkInitState();
 }
@@ -192,49 +258,78 @@ class _DeepLinkInitState extends State<_DeepLinkInit> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      DeepLinkService.instance.initialize(_navKey);
+      DeepLinkHandler.instance
+        ..onLink = _routeDeepLink
+        ..init();
     });
   }
+
+  @override
+  void dispose() {
+    DeepLinkHandler.instance.dispose();
+    super.dispose();
+  }
+
+  void _routeDeepLink(DeepLinkMatch match) {
+    if (!mounted) return;
+    debugPrint('[DeepLink] routing action=${match.action} params=${match.params}');
+
+    switch (match.action) {
+      case 'invite':
+        final token = match.params['token'] ?? '';
+        if (token.isNotEmpty) {
+          _navKey.currentState?.pushNamed('/invite-accept', arguments: token);
+        }
+
+      case 'reset_password':
+        // Supabase handles this via SessionPasswordRecovery state — no extra nav needed.
+        break;
+
+      case 'resolve_token':
+        // Token-based deep link: resolve JWT → {action, target, userId?} via edge function.
+        final token = match.params['token'];
+        if (token != null && token.isNotEmpty) {
+          _resolveDeeplinkToken(token);
+        }
+
+      default:
+        debugPrint('[DeepLink] unhandled action: ${match.action}');
+    }
+  }
+
+  /// Calls the resolve-deeplink edge function to verify the JWT token and
+  /// extract {action, target, userId?}, then dispatches the resulting match.
+  /// Fire-and-forget — errors are logged and silently ignored.
+  Future<void> _resolveDeeplinkToken(String token) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'resolve-deeplink',
+        body: {'token': token},
+      );
+      final data = response.data;
+      if (data == null || data is! Map) {
+        debugPrint('[DeepLink] resolve_token: empty or unexpected response');
+        return;
+      }
+      final action = data['action'] as String?;
+      final target = data['target'] as String?;
+      final userId = data['userId'] as String?;
+      if (action == null || target == null) {
+        debugPrint('[DeepLink] resolve_token: missing fields in response');
+        return;
+      }
+      debugPrint('[DeepLink] resolve_token → action=$action target=$target userId=$userId');
+      // Dispatch as a new match so app-level switch handles it uniformly.
+      _routeDeepLink(DeepLinkMatch(
+        action: action,
+        params: {'target': target, if (userId != null) 'userId': userId},
+        uri: Uri.parse('app://resolved/$action/$target'),
+      ));
+    } catch (e) {
+      debugPrint('[DeepLink] resolve_token error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) => widget.child;
-}
-
-// ── Maintenance képernyő ──────────────────────────────────────
-class _MaintenanceScreen extends StatelessWidget {
-  final String title;
-  final String message;
-  const _MaintenanceScreen({
-    this.title   = 'Karbantartás alatt',
-    this.message = 'Az alkalmazás jelenleg karbantartás alatt van. Kérjük, próbáld meg később.',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.build_rounded, size: 64,
-                  color: AppColors.warning),
-              const SizedBox(height: 24),
-              Text(title, style: AppTypography.titleLarge),
-              const SizedBox(height: 12),
-              Text(
-                message.isNotEmpty
-                    ? message
-                    : 'Az alkalmazás jelenleg karbantartás alatt van. Kérjük, próbáld meg később.',
-                style: AppTypography.bodyMedium
-                    .copyWith(color: AppColors.onBackground.withValues(alpha: 0.6)),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

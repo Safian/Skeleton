@@ -9,6 +9,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ async function sendTelegram(token: string, chatId: string, text: string): Promis
   });
   if (!res.ok) {
     const body = await res.text();
-    console.error('[security-alert] Telegram error:', body);
+    await logError({ fn: 'security-alert', error: new Error(body), context: { step: 'telegram_notify', status: res.status } });
   }
 }
 
@@ -115,7 +116,7 @@ async function sendDiscord(webhookUrl: string, text: string): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.text();
-    console.error('[security-alert] Discord error:', body);
+    await logError({ fn: 'security-alert', error: new Error(body), context: { step: 'discord_notify', status: res.status } });
   }
 }
 
@@ -203,7 +204,7 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (insertError) {
-    console.error('[security-alert] DB insert error:', insertError);
+    await logError({ fn: 'security-alert', error: insertError, context: { step: 'db_insert' } });
     return new Response(JSON.stringify({ error: 'Failed to save log', detail: insertError.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },

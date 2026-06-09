@@ -1,5 +1,5 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:equatable/equatable.dart';
-import '../../models/user_profile.dart';
 import '../../models/admin_stats.dart';
 
 // ============================================================

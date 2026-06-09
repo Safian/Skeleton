@@ -1,8 +1,6 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
-import '../../models/user_profile.dart';
-import '../../models/translation_entry.dart';
-import '../../models/legal_document.dart';
 import '../../repositories/admin_repository.dart';
 
 abstract class AdminState extends Equatable {

@@ -14,6 +14,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ Deno.serve(async (req: Request) => {
   const { data, error } = await supabase.rpc('get_app_config_map');
 
   if (error) {
-    console.error('[app-config] RPC error:', error);
+    await logError({ fn: 'app-config', error, context: { step: 'rpc_get_config' } });
     return new Response(
       JSON.stringify({ error: 'Failed to load config', detail: error.message }),
       {

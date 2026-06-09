@@ -1,9 +1,9 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'core/theme/app_theme.dart';
 import 'core/translation_extension.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/admin_repository.dart';

@@ -1,9 +1,9 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../blocs/users/users_cubit.dart';
 import '../../blocs/session/session_cubit.dart';
 import '../../blocs/session/session_state.dart';

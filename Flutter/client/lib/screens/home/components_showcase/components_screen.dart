@@ -1,8 +1,7 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/components/components.dart';
-import '../../../core/theme/app_theme.dart';
 
 // ============================================================
 // ComponentsScreen – Tab 3 – összes UI komponens bemutatója
@@ -263,7 +262,7 @@ class _ComponentsScreenState extends State<ComponentsScreen> {
                     trailing: Switch(
                       value: _switchValue,
                       onChanged: (v) => setState(() => _switchValue = v),
-                      activeColor: AppColors.primary,
+                      activeThumbColor: AppColors.primary,
                     ),
                   ),
                 ],
@@ -288,7 +287,7 @@ class _ComponentsScreenState extends State<ComponentsScreen> {
                           value: _switchValue,
                           onChanged: (v) =>
                               setState(() => _switchValue = v),
-                          activeColor: AppColors.primary,
+                          activeThumbColor: AppColors.primary,
                         ),
                       ],
                     ),

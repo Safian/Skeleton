@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { logError } from "../_shared/logger.ts";
 
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -159,7 +160,7 @@ Deno.serve(async (req: Request) => {
 
       if (!gptRes.ok) {
         const errText = await gptRes.text();
-        console.error('OpenAI error:', errText);
+        await logError({ fn: 'translate-language', error: new Error(errText), context: { step: 'openai_call', status: gptRes.status } });
         return new Response(JSON.stringify({ error: `OpenAI error: ${gptRes.status}` }), {
           status: 502,
           headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
@@ -204,7 +205,7 @@ Deno.serve(async (req: Request) => {
     });
 
   } catch (err) {
-    console.error('translate-language error:', err);
+    await logError({ fn: 'translate-language', error: err, context: { step: 'top_level_catch' } });
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },

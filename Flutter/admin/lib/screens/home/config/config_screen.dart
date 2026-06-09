@@ -1,3 +1,4 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -5,10 +6,6 @@ import '../../../blocs/app_config/app_config_cubit.dart';
 import '../../../blocs/app_config/app_config_state.dart';
 import '../../../models/app_config.dart';
 import '../../../repositories/app_config_repository.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_sizes.dart';
-import '../../../core/theme/app_typography.dart';
-import '../../../core/components/components.dart';
 
 // ============================================================
 // ConfigScreen – Feature Flags + Karbantartás mód vezérlő  [M5]
@@ -161,7 +158,7 @@ class _MaintenanceCardState extends State<_MaintenanceCard> {
             else
               Switch(
                 value: isOn,
-                activeColor: AppColors.warning,
+                activeThumbColor: AppColors.warning,
                 onChanged: (v) => _saveMaintenanceMode(v),
               ),
           ]),

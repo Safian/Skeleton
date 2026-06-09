@@ -10,6 +10,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -217,7 +218,7 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (insertError) {
-    console.error('[session-log] Insert error:', insertError);
+    await logError({ fn: 'session-log', error: insertError, context: { step: 'db_insert' } });
     return new Response(
       JSON.stringify({ error: 'Failed to log session', detail: insertError.message }),
       { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },

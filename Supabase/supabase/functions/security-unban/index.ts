@@ -9,6 +9,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── CORS allow-list ────────────────────────────────────────────
 // Wildcard '*' helyett explicit allow-list (lásd translate-language).
@@ -111,7 +112,15 @@ Deno.serve(async (req: Request) => {
   const vpsSettings: Record<string, string> = {};
   for (const row of settingsRows2 ?? []) vpsSettings[row.id] = row.value;
 
-  let vpsResult: Record<string, unknown> = { skipped: true };
+  // Ha nincs webhook: DEMO MÓD – a Supabase DB frissül, a VPS fail2ban hívás elmarad.
+  // Setup: app_settings → unban_webhook_url (pl. http://VPS_IP:9090/unban)
+  // A VPS-en egy egyszerű HTTP listener kell, pl.: https://github.com/fail2ban/fail2ban
+  let vpsResult: Record<string, unknown> = {
+    skipped: true,
+    demo_hint: !vpsSettings.unban_webhook_url
+      ? 'VPS webhook nincs beállítva – app_settings → unban_webhook_url'
+      : undefined,
+  };
 
   if (vpsSettings.unban_webhook_url) {
     // SSRF védelme: csak http/https engedélyezett, nem belső cím
@@ -144,7 +153,7 @@ Deno.serve(async (req: Request) => {
         vpsResult = { ok: vpsRes.ok, status: vpsRes.status };
       } catch (err) {
         vpsResult = { error: String(err) };
-        console.error('[security-unban] VPS listener error:', err);
+        await logError({ fn: 'security-unban', error: err, context: { step: 'vps_listener' } });
       }
     }
   }

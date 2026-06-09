@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -75,7 +76,7 @@ Deno.serve(async (req: Request) => {
   const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
   if (deleteError) {
-    console.error('[delete-account] Delete error:', deleteError);
+    await logError({ fn: 'delete-account', error: deleteError, context: { step: 'delete_user', userId: user.id } });
     return new Response(
       JSON.stringify({ error: 'Account deletion failed', detail: deleteError.message }),
       { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },

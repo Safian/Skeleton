@@ -9,6 +9,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── CORS allow-list ────────────────────────────────────────────
 // Wildcard '*' helyett explicit allow-list (lásd translate-language).
@@ -226,7 +227,7 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (invError || !inv) {
-    console.error('[admin-invite] DB insert error:', invError);
+    await logError({ fn: 'admin-invite', error: invError, context: { step: 'db_insert', email } });
     return new Response(JSON.stringify({ error: 'DB error', detail: invError?.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
@@ -269,12 +270,19 @@ Deno.serve(async (req: Request) => {
       );
       emailSent = true;
     } else {
-      emailError = 'Nincs e-mail szolgáltató konfigurálva (resend_api_key vagy mailgun_api_key).';
-      console.warn('[admin-invite] No email provider configured');
+      // DEMO MÓD: a meghívó DB-ben létrejött, e-mail nem megy ki.
+      // Az invite_url a válaszban visszajön – manuálisan küldheted el.
+      // Setup (válassz egyet):
+      //   Resend  → app_settings → resend_api_key  → https://resend.com/api-keys
+      //   Mailgun → app_settings → mailgun_api_key + mailgun_domain → https://app.mailgun.com
+      emailError = 'DEMO MÓD – e-mail szolgáltató nincs konfigurálva. '
+        + 'Resend: app_settings → resend_api_key → https://resend.com/api-keys | '
+        + 'Mailgun: mailgun_api_key + mailgun_domain → https://app.mailgun.com';
+      console.warn('[admin-invite] DEMO MODE – no email provider configured. invite_url:', inviteUrl);
     }
   } catch (err) {
     emailError = String(err);
-    console.error('[admin-invite] Email send error:', err);
+    await logError({ fn: 'admin-invite', error: err, context: { step: 'email_send', email } });
   }
 
   return new Response(

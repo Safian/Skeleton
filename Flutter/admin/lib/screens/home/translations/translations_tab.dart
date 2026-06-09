@@ -1,3 +1,4 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -7,10 +8,7 @@ import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 
-import '../../../core/theme/app_theme.dart';
-import '../../../core/components/components.dart';
 import '../../../blocs/admin/admin_cubit.dart';
-import '../../../models/translation_entry.dart';
 import '../../../blocs/translation/translation_cubit.dart';
 import '../../../repositories/admin_repository.dart';
 

@@ -1,10 +1,10 @@
+import 'package:skeleton_shared/skeleton_shared.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../core/components/components.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../repositories/admin_repository.dart';
 
 // ============================================================
@@ -31,7 +31,12 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
 
   // URL mappings
   List<Map<String, String>> _mappings = [];
+  // Egy tuple per sor: (path, action, description) controller
+  List<(TextEditingController, TextEditingController, TextEditingController)> _mappingCtrls = [];
   bool _savingMappings = false;
+
+  // Base URL a .well-known ellenőrzéshez (app_settings → app_base_url)
+  String _baseUrl = '';
 
   @override
   void initState() {
@@ -43,7 +48,26 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
   void dispose() {
     _aasaCtrl.dispose();
     _assetlinksCtrl.dispose();
+    _disposeMappingControllers();
     super.dispose();
+  }
+
+  void _disposeMappingControllers() {
+    for (final g in _mappingCtrls) {
+      g.$1.dispose();
+      g.$2.dispose();
+      g.$3.dispose();
+    }
+    _mappingCtrls = [];
+  }
+
+  void _rebuildMappingControllers() {
+    _disposeMappingControllers();
+    _mappingCtrls = _mappings.map((m) => (
+      TextEditingController(text: m['path']        ?? ''),
+      TextEditingController(text: m['action']      ?? ''),
+      TextEditingController(text: m['description'] ?? ''),
+    )).toList();
   }
 
   Future<void> _loadSettings() async {
@@ -63,8 +87,21 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
         orElse: () => {'value': '[]'},
       )['value'] as String? ?? '[]';
 
+      // Base URL a .well-known ellenőrzéshez:
+      // 1. app_settings → app_base_url
+      // 2. fallback: SUPABASE_URL a .env-ből
+      var rawBase = rows.firstWhere(
+        (r) => r['id'] == 'app_base_url',
+        orElse: () => {'value': ''},
+      )['value'] as String? ?? '';
+      if (rawBase.isEmpty) rawBase = dotenv.env['SUPABASE_URL'] ?? '';
+      if (rawBase.isNotEmpty && !rawBase.startsWith('http')) {
+        rawBase = 'https://$rawBase';
+      }
+
       _aasaCtrl.text = aasa;
       _assetlinksCtrl.text = assetlinks;
+      _baseUrl = rawBase;
 
       try {
         final decoded = (jsonDecode(mappingsRaw) as List).cast<Map<String, dynamic>>();
@@ -76,6 +113,8 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
       } catch (_) {
         _mappings = [];
       }
+      // Controllereket újraépítjük a betöltött mappings alapján
+      _rebuildMappingControllers();
     } catch (e) {
       _snack('Betöltési hiba: $e', error: true);
     } finally {
@@ -181,7 +220,7 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             // ── Live státusz ─────────────────────────────────
-            _WellKnownStatus(),
+            _WellKnownStatus(baseUrl: _baseUrl),
             const SizedBox(height: AppSpacing.lg),
 
             // ── AASA + AssetLinks ────────────────────────────
@@ -302,8 +341,14 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
               Text('URL → Akció leképezések', style: AppTypography.titleSmall),
               const Spacer(),
               TextButton.icon(
-                onPressed: () => setState(() => _mappings.add(
-                    {'path': '', 'action': '', 'description': ''})),
+                onPressed: () => setState(() {
+                  _mappings.add({'path': '', 'action': '', 'description': ''});
+                  _mappingCtrls.add((
+                    TextEditingController(),
+                    TextEditingController(),
+                    TextEditingController(),
+                  ));
+                }),
                 icon: const Icon(LucideIcons.plus, size: 14),
                 label: const Text('Új sor'),
                 style: TextButton.styleFrom(
@@ -356,10 +401,9 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
               ),
 
             ...List.generate(_mappings.length, (i) {
-              final m = _mappings[i];
-              final pathCtrl  = TextEditingController(text: m['path']);
-              final actCtrl   = TextEditingController(text: m['action']);
-              final descCtrl  = TextEditingController(text: m['description']);
+              final pathCtrl = _mappingCtrls[i].$1;
+              final actCtrl  = _mappingCtrls[i].$2;
+              final descCtrl = _mappingCtrls[i].$3;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(children: [
@@ -381,8 +425,13 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () =>
-                        setState(() => _mappings.removeAt(i)),
+                    onPressed: () => setState(() {
+                      _mappings.removeAt(i);
+                      final g = _mappingCtrls.removeAt(i);
+                      g.$1.dispose();
+                      g.$2.dispose();
+                      g.$3.dispose();
+                    }),
                   ),
                 ]),
               );
@@ -461,6 +510,9 @@ class _DeepLinksScreenState extends State<DeepLinksScreen> {
 enum _WknState { idle, loading, ok, error }
 
 class _WellKnownStatus extends StatefulWidget {
+  final String baseUrl;
+  const _WellKnownStatus({required this.baseUrl});
+
   @override
   State<_WellKnownStatus> createState() => _WellKnownStatusState();
 }
@@ -470,13 +522,24 @@ class _WellKnownStatusState extends State<_WellKnownStatus> {
   _WknState _assetlinksState  = _WknState.idle;
   int? _aasaCode, _assetlinksCode;
 
-  Future<void> _check(String url, bool isAasa) async {
+  // [path] egy relatív útvonal, pl. '/.well-known/apple-app-site-association'
+  Future<void> _check(String path, bool isAasa) async {
     setState(() {
       if (isAasa) { _aasaState = _WknState.loading; _aasaCode = null; }
       else { _assetlinksState = _WknState.loading; _assetlinksCode = null; }
     });
+
+    final base = widget.baseUrl.trimRight();
+    if (base.isEmpty) {
+      setState(() {
+        if (isAasa) _aasaState = _WknState.error;
+        else _assetlinksState = _WknState.error;
+      });
+      return;
+    }
+
     try {
-      final res = await http.get(Uri.parse(url))
+      final res = await http.get(Uri.parse('$base$path'))
           .timeout(const Duration(seconds: 8));
       setState(() {
         final code = res.statusCode;

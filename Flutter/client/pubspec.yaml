@@ -10,6 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Shared package (theme, components, models)
+  skeleton_shared:
+    path: ../shared
+
   # Supabase
   supabase_flutter: ^2.12.0
 

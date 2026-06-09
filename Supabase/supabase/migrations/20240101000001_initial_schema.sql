@@ -1,8 +1,9 @@
 -- ============================================================
 -- Konszolidált initiális migráció
 -- Tartalmaz: user_profiles, items, admin features, security,
---            invitations, app config, sessions, backups,
---            bug reports, translations, legal docs, audit log
+--            invitations, pending_invites, app config, sessions,
+--            backups, bug reports, translations, legal docs,
+--            audit log, realtime publication
 -- ============================================================
 
 -- ════════════════════════════════════════════════════════════
@@ -237,6 +238,19 @@ BEGIN
 END;
 $$;
 
+-- Lejárt pending_invites törlése (24h-nál régebbiek)
+CREATE OR REPLACE FUNCTION public.cleanup_expired_pending_invites()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM public.pending_invites
+  WHERE expires_at < now() - INTERVAL '24 hours';
+END;
+$$;
+
 -- Resource snapshot cleanup (SET search_path rögzítve – security hardening)
 CREATE OR REPLACE FUNCTION public.cleanup_old_resource_snapshots()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -375,6 +389,8 @@ INSERT INTO public.app_settings (id, value, description) VALUES
   ('telegram_chat_id',          '',     'Telegram Chat ID ahova a riasztások mennek.'),
   ('discord_webhook_url',       '',     'Discord Webhook URL (alternatíva Telegram helyett).'),
   ('unban_webhook_url',         '',     'A szerveren futó unban endpoint URL-je (pl. http://VPS_IP:9090/unban).'),
+  ('backup_webhook_url',        '',     'A szerveren futó backup trigger endpoint URL-je (pl. http://VPS_IP:9091/backup).'),
+  ('backup_webhook_secret',     '',     'Backup webhook autentikációs secret (X-Backup-Secret header).'),
   ('smtp_from_email',           '',     'Feladó e-mail cím (pl. noreply@sajatdomain.com).'),
   ('smtp_from_name',            'Admin','Feladó megjelenített neve.'),
   ('app_base_url',              '',     'Az app alap URL-je a meghívó linkhez (pl. https://app.sajatdomain.com).'),
@@ -636,6 +652,41 @@ CREATE POLICY "Service role full access admin_invitations" ON public.admin_invit
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_invitations TO authenticated;
 GRANT ALL ON public.admin_invitations TO service_role;
+
+
+-- ── pending_invites ───────────────────────────────────────────
+-- Deferred deep linking: webes meghívó link IP-alapú egyeztetés
+-- az app első indításakor. [M2.4]
+CREATE TABLE IF NOT EXISTS public.pending_invites (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token      TEXT NOT NULL UNIQUE,           -- az /invite?token=XYZ értéke
+  client_ip  INET,                           -- a webes redirect előtt rögzített IP
+  metadata   JSONB NOT NULL DEFAULT '{}',    -- user-agent, referer stb.
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  matched_at TIMESTAMPTZ,                    -- mikor egyezett be az app
+  is_used    BOOLEAN NOT NULL DEFAULT false,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '1 hour')
+);
+
+CREATE INDEX IF NOT EXISTS pending_invites_ip_idx
+  ON public.pending_invites (client_ip, expires_at)
+  WHERE is_used = false;
+
+CREATE INDEX IF NOT EXISTS pending_invites_token_idx
+  ON public.pending_invites (token);
+
+ALTER TABLE public.pending_invites ENABLE ROW LEVEL SECURITY;
+
+-- Csak service_role írhat/olvashat (az Edge Functions service_role-lal futnak)
+CREATE POLICY "Service role manages pending_invites"
+  ON public.pending_invites FOR ALL
+  TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Anon nem fér hozzá közvetlenül (az Edge Function kezeli)
+REVOKE ALL ON public.pending_invites FROM anon;
+REVOKE ALL ON public.pending_invites FROM authenticated;
+GRANT ALL   ON public.pending_invites TO service_role;
 
 
 -- ── app_config ────────────────────────────────────────────────

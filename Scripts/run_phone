@@ -1,0 +1,405 @@
+#!/usr/bin/env bash
+# run_phone — Skeleton gyors futtatás / telefon-build script
+#
+# Használat:
+#   bash Scripts/run_phone                # AUTO: ha fizikai iPhone csatlakozik → arra buildel (mindkét app, RELEASE);
+#                                          #       ha nincs telefon → iPhone szimulátor, DEBUG + hot reload (2 Terminal ablak)
+#   bash Scripts/run_phone --simulator    # Kényszerített szimulátor mód
+#   bash Scripts/run_phone --client       # Kliens app → fizikai iPhone, RELEASE standalone build + install + indítás
+#   bash Scripts/run_phone --admin        # Admin app  → fizikai iPhone, RELEASE standalone build + install + indítás
+#   bash Scripts/run_phone --ios-only     # MINDKÉT app → fizikai iPhone (client + admin), RELEASE standalone
+#   bash Scripts/run_phone --android-only # MINDKÉT app → csatlakoztatott Android telefon, RELEASE standalone
+#
+# Build mód (csak fizikai telefonnál; standalone = géphez kötés nélkül is fut):
+#   --release   (alapértelmezett) AOT, géphez kötés nélkül is fut
+#   --profile   ha a release signing nem menne
+#   --debug     régi viselkedés: flutter run, hot reload, géphez kötve (csak egy apphoz)
+#
+# Opcionális:
+#   --device <udid|name|serial>   manuálisan megad egy eszköz ID-t (sim, iPhone vagy Android)
+
+set -euo pipefail
+
+# ── Színek ────────────────────────────────────────────────────────────────────
+GREEN="\033[92m"; YELLOW="\033[93m"; RED="\033[91m"; CYAN="\033[96m"; BOLD="\033[1m"; RESET="\033[0m"
+info()  { echo -e "${CYAN}▶ $*${RESET}" >&2; }
+ok()    { echo -e "${GREEN}✓ $*${RESET}" >&2; }
+warn()  { echo -e "${YELLOW}⚠ $*${RESET}" >&2; }
+die()   { echo -e "${RED}✗ $*${RESET}" >&2; exit 1; }
+
+# ── Elérési utak ──────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$ROOT_DIR/.env"
+CLIENT_DIR="$ROOT_DIR/Flutter/client"
+ADMIN_DIR="$ROOT_DIR/Flutter/admin"
+
+# Xcode toolchain (xcodebuild + devicectl) — release build és telepítés-ellenőrzés
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+
+# Bundle ID-k a devicectl ellenőrzéshez/indításhoz (iOS)
+CLIENT_BUNDLE_ID="hu.safian.skeleton.flutter.dev"
+ADMIN_BUNDLE_ID="hu.safian.skeleton.flutter.admin.dev"
+
+# Android package-ek (adb ellenőrzéshez/indításhoz)
+CLIENT_ANDROID_PKG="hu.safian.skeleton.dev"
+ADMIN_ANDROID_PKG="hu.safian.skeleton.admin.dev"
+
+# adb felderítése (Android telepítés-ellenőrzéshez + indításhoz)
+ADB=""
+for _adb in "$HOME/Library/Android/sdk/platform-tools/adb" "$HOME/Android/Sdk/platform-tools/adb" \
+            "${ANDROID_HOME:-}/platform-tools/adb" "${ANDROID_SDK_ROOT:-}/platform-tools/adb"; do
+  [[ -x "$_adb" ]] && { ADB="$_adb"; break; }
+done
+[[ -z "$ADB" ]] && ADB="$(command -v adb 2>/dev/null || true)"
+
+# ── Argumentumok feldolgozása ──────────────────────────────────────────────────
+MODE="simulator"      # simulator | physical
+MODE_EXPLICIT=false   # true, ha a felhasználó explicit mód/target flaget adott meg
+TARGET="both"         # both | admin | client
+PLATFORM="ios"        # ios | android  (csak fizikai módban releváns)
+MANUAL_DEVICE=""
+BUILD_MODE="release"  # release | profile | debug  (csak fizikai telefonnál)
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --admin)           MODE="physical"; TARGET="admin";  MODE_EXPLICIT=true; shift ;;
+    --client)          MODE="physical"; TARGET="client"; MODE_EXPLICIT=true; shift ;;
+    --ios-only)        MODE="physical"; PLATFORM="ios";     TARGET="both"; MODE_EXPLICIT=true; shift ;;
+    --android-only)    MODE="physical"; PLATFORM="android"; TARGET="both"; MODE_EXPLICIT=true; shift ;;
+    --simulator|--sim) MODE="simulator"; MODE_EXPLICIT=true; shift ;;
+    --release)         BUILD_MODE="release"; shift ;;
+    --profile)         BUILD_MODE="profile"; shift ;;
+    --debug)           BUILD_MODE="debug";   shift ;;
+    --device)          MANUAL_DEVICE="$2"; MODE_EXPLICIT=true; shift 2 ;;
+    --help|-h)
+      sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
+      exit 0 ;;
+    *) die "Ismeretlen argumentum: $1  (--admin | --client | --ios-only | --android-only | --simulator | --release | --profile | --debug | --device <id>)" ;;
+  esac
+done
+
+# ── .env ellenőrzése és szinkronizálása ───────────────────────────────────────
+# A Skeleton flutter_dotenv-et használ (nem --dart-define), ezért
+# a gyökér .env-ből szinkronizáljuk a per-app .env fájlokat build előtt.
+[[ -f "$ENV_FILE" ]] || die ".env nem található: $ENV_FILE"
+
+sync_app_env() {
+  local app_dir="$1"
+  local supabase_url supabase_anon_key
+  supabase_url=$(grep -E "^SUPABASE_URL=" "$ENV_FILE" | cut -d= -f2- | tr -d '[:space:]')
+  supabase_anon_key=$(grep -E "^SUPABASE_ANON_KEY=" "$ENV_FILE" | cut -d= -f2- | tr -d '[:space:]')
+  [[ -n "$supabase_url" ]]      || die "SUPABASE_URL hiányzik az .env-ből"
+  [[ -n "$supabase_anon_key" ]] || die "SUPABASE_ANON_KEY hiányzik az .env-ből"
+  cat > "$app_dir/.env" <<EOF
+# Auto-generated by run_phone – ne szerkeszd kézzel!
+SUPABASE_URL=$supabase_url
+SUPABASE_ANON_KEY=$supabase_anon_key
+EOF
+  info "$(basename "$app_dir")/.env szinkronizálva → $supabase_url"
+}
+
+# ── Eszköz meghatározása ───────────────────────────────────────────────────────
+resolve_simulator() {
+  local patterns=("iPhone 17 Pro" "iPhone 16 Pro" "iPhone 15 Pro" "iPhone")
+  for pat in "${patterns[@]}"; do
+    local udid
+    udid=$(xcrun simctl list devices available 2>/dev/null \
+      | grep "$pat" \
+      | grep -v "Plus\|Max\|Mini\|Pro Max" \
+      | head -1 \
+      | grep -E -o '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' || true)
+    if [[ -n "$udid" ]]; then
+      local name
+      name=$(xcrun simctl list devices available 2>/dev/null | grep "$udid" | sed 's/ (.*//' | xargs)
+      echo "$udid"
+      info "Szimulátor: $name ($udid)"
+      return
+    fi
+  done
+  die "Nem található elérhető iPhone szimulátor. Nyisd meg az Xcode → Simulators panelt."
+}
+
+resolve_physical_device() {
+  local dev_line
+  dev_line=$(flutter devices 2>/dev/null \
+    | grep -E "• ios •" \
+    | grep -iv "simulator" \
+    | head -1 || true)
+
+  if [[ -z "$dev_line" ]]; then
+    dev_line=$(flutter devices 2>/dev/null \
+      | grep -iE "iphone|ipad" \
+      | grep -iv "simulator" \
+      | head -1 || true)
+  fi
+
+  if [[ -z "$dev_line" ]]; then
+    local dc_udid
+    dc_udid=$(xcrun devicectl list devices 2>/dev/null \
+      | grep -iE "available|connected|paired" \
+      | grep -E -o '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+      | head -1 || true)
+    if [[ -n "$dc_udid" ]]; then
+      info "Fizikai eszköz (devicectl): $dc_udid"
+      echo "$dc_udid"
+      return
+    fi
+    die "Nem található csatlakoztatott fizikai iOS eszköz.\nEllenőrizd:\n  1. A telefon USB-vel csatlakozik\n  2. Trust This Computer elfogadva\n  3. Fejlesztői üzemmód bekapcsolva (Beállítások → Adatvédelem → Fejlesztői Üzemmód)"
+  fi
+
+  local udid
+  udid=$(echo "$dev_line" \
+    | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
+    | tr -d ' ' \
+    | head -1 || true)
+
+  if [[ -z "$udid" ]]; then
+    warn "Eszköz ID nem nyerhető ki — a Flutter automatikusan választja ki a fizikai eszközt"
+    echo ""
+    return
+  fi
+
+  local name
+  name=$(echo "$dev_line" | awk -F'•' '{print $1}' | xargs)
+  info "Fizikai eszköz: $name ($udid)"
+  echo "$udid"
+}
+
+resolve_physical_device_android() {
+  local dev_line
+  dev_line=$(flutter devices 2>/dev/null \
+    | grep -E "• android" \
+    | grep -iv "emulator" \
+    | head -1 || true)
+
+  if [[ -z "$dev_line" ]]; then
+    die "Nem található csatlakoztatott fizikai Android eszköz.\nEllenőrizd:\n  1. A telefon USB-vel csatlakozik\n  2. USB-hibakeresés bekapcsolva (Beállítások → Fejlesztői beállítások → USB-hibakeresés)\n  3. 'Allow USB debugging' elfogadva a telefonon"
+  fi
+
+  local serial
+  serial=$(echo "$dev_line" \
+    | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
+    | tr -d ' ' \
+    | head -1 || true)
+
+  if [[ -z "$serial" ]]; then
+    warn "Eszköz serial nem nyerhető ki — a Flutter automatikusan választja ki az Android eszközt"
+    echo ""
+    return
+  fi
+
+  local name
+  name=$(echo "$dev_line" | awk -F'•' '{print $1}' | xargs)
+  info "Fizikai Android eszköz: $name ($serial)"
+  echo "$serial"
+}
+
+# ── Szimulátor mód: 2 Terminal ablak ──────────────────────────────────────────
+run_simulator() {
+  local sim_udid
+  if [[ -n "$MANUAL_DEVICE" ]]; then
+    sim_udid="$MANUAL_DEVICE"
+    info "Manuálisan megadott eszköz: $sim_udid"
+  else
+    sim_udid=$(resolve_simulator)
+  fi
+
+  # Szimulátor indítása ha szükséges
+  local state
+  state=$(xcrun simctl list devices 2>/dev/null | grep "$sim_udid" | grep -o "(Booted)\|(Shutdown)" || echo "(Shutdown)")
+  if [[ "$state" == "(Shutdown)" ]]; then
+    info "Szimulátor indítása..."
+    xcrun simctl boot "$sim_udid" 2>/dev/null || true
+    open -a Simulator 2>/dev/null || true
+    sleep 2
+  fi
+
+  local d_flag="-d $sim_udid"
+  local FLUTTER="${FLUTTER_BIN:-flutter}"
+
+  info "Kliens app indítása új Terminal ablakban..."
+  osascript <<EOF
+tell application "Terminal"
+  set w1 to do script "cd '$CLIENT_DIR' && '$FLUTTER' run $d_flag"
+  set custom title of w1 to "Skeleton — Kliens"
+end tell
+EOF
+
+  sleep 1
+
+  info "Admin app indítása új Terminal ablakban..."
+  osascript <<EOF
+tell application "Terminal"
+  set w2 to do script "cd '$ADMIN_DIR' && '$FLUTTER' run $d_flag"
+  set custom title of w2 to "Skeleton — Admin"
+end tell
+EOF
+
+  ok "Mindkét app elindítva a szimulátorban!"
+  echo -e "${BOLD}  Szimulátor UDID: $sim_udid${RESET}"
+  echo -e "  Hot reload: r   |   Hot restart: R   |   Kilépés: q"
+}
+
+# ── Egy app telepítése fizikai iPhone-ra ──────────────────────────────────────
+install_app_ios() {
+  local app_dir="$1" device_name="$2" bundle_id="$3" dev_udid="$4"
+
+  # .env szinkronizálás build előtt
+  sync_app_env "$app_dir"
+
+  cd "$app_dir"
+
+  if [[ "$BUILD_MODE" == "debug" ]]; then
+    local d_flag=""
+    [[ -n "$dev_udid" ]] && d_flag="-d $dev_udid"
+    info "$device_name app DEBUG futtatása fizikai iPhone-on (géphez kötve, hot reload)..."
+    echo ""
+    # shellcheck disable=SC2086
+    exec flutter run $d_flag
+  fi
+
+  [[ -n "$dev_udid" ]] || die "Eszköz UDID nem határozható meg — add meg kézzel: --device <udid>"
+
+  info "$device_name app buildelése (iOS, $BUILD_MODE) — $app_dir"
+  flutter build ios --"$BUILD_MODE" \
+    || die "Build sikertelen ($device_name, $BUILD_MODE). Ha signing hiba: próbáld --profile kapcsolóval."
+
+  info "Telepítés az iPhone-ra ($dev_udid)..."
+  flutter install --"$BUILD_MODE" -d "$dev_udid" \
+    || die "Telepítés sikertelen ($device_name)."
+
+  info "Telepítés ellenőrzése devicectl-lel..."
+  if xcrun devicectl device info apps --device "$dev_udid" 2>/dev/null | grep -q "$bundle_id"; then
+    ok "$device_name app telepítve az iPhone-ra: $bundle_id"
+  else
+    die "$device_name app NEM található a telefonon a telepítés után ($bundle_id). Próbáld újra, vagy --device <udid>."
+  fi
+
+  info "$device_name app indítása a telefonon..."
+  if xcrun devicectl device process launch --device "$dev_udid" "$bundle_id" 2>/dev/null | grep -q "Launched application"; then
+    ok "$device_name app elindítva — géphez kötés nélkül, lezárt session mellett is fut."
+  else
+    warn "Telepítve, de a launch nem erősíthető meg. Indítsd kézzel a telefonon."
+    warn "Ha 'untrusted developer': Beállítások → Általános → VPN és eszközkezelés → Apple Development → Megbízom."
+  fi
+}
+
+# ── Egy app telepítése fizikai Android telefonra ──────────────────────────────
+install_app_android() {
+  local app_dir="$1" device_name="$2" pkg="$3" serial="$4"
+
+  # .env szinkronizálás build előtt
+  sync_app_env "$app_dir"
+
+  cd "$app_dir"
+
+  if [[ "$BUILD_MODE" == "debug" ]]; then
+    local d_flag=""
+    [[ -n "$serial" ]] && d_flag="-d $serial"
+    info "$device_name app DEBUG futtatása Android telefonon (géphez kötve, hot reload)..."
+    echo ""
+    # shellcheck disable=SC2086
+    exec flutter run $d_flag
+  fi
+
+  local mode="$BUILD_MODE"
+  [[ "$mode" == "profile" ]] && mode="release"
+
+  info "$device_name app buildelése (Android APK, $mode) — $app_dir"
+  flutter build apk --"$mode" \
+    || die "Build sikertelen ($device_name, $mode)."
+
+  info "Telepítés a telefonra ($serial)..."
+  flutter install --"$mode" -d "$serial" \
+    || die "Telepítés sikertelen ($device_name)."
+
+  if [[ -n "$ADB" ]]; then
+    info "Telepítés ellenőrzése adb-vel..."
+    if "$ADB" -s "$serial" shell pm list packages 2>/dev/null | grep -q "package:$pkg"; then
+      ok "$device_name app telepítve a telefonra: $pkg"
+    else
+      die "$device_name app NEM található a telefonon a telepítés után ($pkg). Próbáld újra."
+    fi
+    info "$device_name app indítása a telefonon..."
+    if "$ADB" -s "$serial" shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; then
+      ok "$device_name app elindítva a telefonon."
+    else
+      warn "Telepítve, de a launch nem erősíthető meg. Indítsd kézzel a telefonon."
+    fi
+  else
+    ok "$device_name app telepítve ($pkg). (adb nem található — ellenőrzés/indítás kihagyva; indítsd kézzel.)"
+  fi
+}
+
+# ── Fizikai eszköz mód ────────────────────────────────────────────────────────
+run_physical() {
+  [[ "$BUILD_MODE" == "debug" && "$TARGET" == "both" ]] \
+    && die "A --debug mód csak egy apphoz használható (--admin vagy --client)."
+
+  local dev_id
+  if [[ -n "$MANUAL_DEVICE" ]]; then
+    dev_id="$MANUAL_DEVICE"
+    info "Manuálisan megadott eszköz: $dev_id"
+  elif [[ "$PLATFORM" == "android" ]]; then
+    dev_id=$(resolve_physical_device_android)
+  else
+    dev_id=$(resolve_physical_device)
+  fi
+
+  local targets=()
+  case "$TARGET" in
+    admin)  targets=(admin) ;;
+    client) targets=(client) ;;
+    both)   targets=(client admin) ;;
+  esac
+
+  local t app_dir device_name
+  for t in "${targets[@]}"; do
+    case "$t" in
+      admin)  app_dir="$ADMIN_DIR";  device_name="Admin"  ;;
+      client) app_dir="$CLIENT_DIR"; device_name="Kliens" ;;
+    esac
+    if [[ "$PLATFORM" == "android" ]]; then
+      local pkg
+      [[ "$t" == "admin" ]] && pkg="$ADMIN_ANDROID_PKG" || pkg="$CLIENT_ANDROID_PKG"
+      install_app_android "$app_dir" "$device_name" "$pkg" "$dev_id"
+    else
+      local bid
+      [[ "$t" == "admin" ]] && bid="$ADMIN_BUNDLE_ID" || bid="$CLIENT_BUNDLE_ID"
+      install_app_ios "$app_dir" "$device_name" "$bid" "$dev_id"
+    fi
+  done
+
+  [[ "$TARGET" == "both" ]] && ok "Mindkét app feltöltve a telefonra ($PLATFORM)."
+}
+
+# ── Főprogram ─────────────────────────────────────────────────────────────────
+echo -e "${BOLD}╔════════════════════════════════════╗${RESET}"
+echo -e "${BOLD}║      Skeleton run_phone            ║${RESET}"
+echo -e "${BOLD}╚════════════════════════════════════╝${RESET}"
+echo ""
+
+# ── AUTO: ha nincs explicit mód-flag és van csatlakoztatott fizikai iPhone,
+#         arra buildelünk (mindkét app, RELEASE). Ha nincs → szimulátor. ──
+if [[ "$MODE_EXPLICIT" == false && -z "$MANUAL_DEVICE" ]]; then
+  AUTO_UDID=$(xcrun devicectl list devices 2>/dev/null \
+    | grep -iE "available|connected|paired" \
+    | grep -E -o '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+    | sort -u || true)
+  AUTO_COUNT=$(echo -n "$AUTO_UDID" | grep -c . || true)
+  if [[ "$AUTO_COUNT" -ge 1 ]]; then
+    MANUAL_DEVICE=$(echo "$AUTO_UDID" | head -1)
+    MODE="physical"; PLATFORM="ios"; TARGET="both"
+    ok "Fizikai iPhone észlelve → arra buildelek (mindkét app, RELEASE): $MANUAL_DEVICE"
+    [[ "$AUTO_COUNT" -gt 1 ]] && warn "Több eszköz csatlakozik — az elsőt választom. Konkrét: --device <udid>."
+    info "Szimulátorhoz: bash Scripts/run_phone --simulator"
+  else
+    info "Nincs csatlakoztatott fizikai iPhone → szimulátor mód."
+  fi
+fi
+
+case "$MODE" in
+  simulator) run_simulator ;;
+  physical)  run_physical  ;;
+esac

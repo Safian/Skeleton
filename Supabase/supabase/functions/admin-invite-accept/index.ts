@@ -12,6 +12,7 @@
  */
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { logError } from '../_shared/logger.ts';
 
 // ── CORS allow-list ────────────────────────────────────────────
 // Wildcard '*' helyett explicit allow-list (lásd translate-language).
@@ -83,7 +84,7 @@ Deno.serve(async (req: Request) => {
   );
 
   if (rpcError) {
-    console.error('[admin-invite-accept] RPC error:', rpcError);
+    await logError({ fn: 'admin-invite-accept', error: rpcError, context: { step: 'rpc_validate', token } });
     return new Response(JSON.stringify({ error: 'Validációs hiba' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
@@ -135,7 +136,7 @@ Deno.serve(async (req: Request) => {
   });
 
   if (signUpError || !newUser?.user) {
-    console.error('[admin-invite-accept] createUser error:', signUpError);
+    await logError({ fn: 'admin-invite-accept', error: signUpError, context: { step: 'create_user', email } });
     return new Response(
       JSON.stringify({ error: 'Regisztráció sikertelen: ' + (signUpError?.message ?? 'unknown') }),
       { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } },
